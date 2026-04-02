@@ -175,3 +175,57 @@ similarity_threshold = 0.8 # SSM相似度
 - Essentia: https://essentia.upf.edu/
 - madmom: https://madmom.readthedocs.io/
 - 论文: "Joint Segmentation and Classification of Song Structures" (ISMIR 2019)
+
+---
+
+## 七、实测对比结果 (2026-04-02)
+
+### 测试歌曲
+- 文件: 决无绝Hadrcore.mp3
+- 时长: 39.4秒
+- 类型: Electronic/Hardcore
+
+### 结果对比
+
+| 指标 | librosa | Essentia | 差异 |
+|------|---------|----------|------|
+| **BPM** | 120.0 | 98.5 | 21.5 (18%) |
+| **Key** | G# | C# | 不同 |
+| **Energy** | 11.5% | 12.1% | 0.6% |
+| **段落数** | 4 | 4 | 一致 |
+
+### 分析
+
+1. **BPM差异**: 
+   - librosa给出120 BPM
+   - Essentia给出98.5 BPM
+   - 对于电子音乐，Essentia的结果可能更准确
+
+2. **调性差异**:
+   - G# vs C# (差6个半音)
+   - 可能是算法对转调的处理不同
+   - 需要更多测试验证
+
+3. **段落检测**:
+   - 两者基于时长规则，结果一致
+   - 真正准确的段落检测需要MFCC/SSM
+
+### 结论
+
+**推荐方案**: librosa + Essentia 融合
+
+```python
+# 最终BPM = 加权平均
+final_bpm = librosa_bpm * 0.4 + essentia_bpm * 0.6
+
+# 段落检测优先级:
+# 1. Essentia (如可用)
+# 2. librosa (备选)
+# 3. 用户手动修正 (最准)
+```
+
+### madmom状态
+
+- ❌ Python 3.10 兼容性问题
+- 建议使用 conda 环境安装 Python 3.9 版本
+- 如需最高精度，可单独配置madmom环境
