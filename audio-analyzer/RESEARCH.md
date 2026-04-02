@@ -229,3 +229,39 @@ final_bpm = librosa_bpm * 0.4 + essentia_bpm * 0.6
 - ❌ Python 3.10 兼容性问题
 - 建议使用 conda 环境安装 Python 3.9 版本
 - 如需最高精度，可单独配置madmom环境
+
+---
+
+## 八、madmom环境配置 (2026-04-02)
+
+### 安装结果
+
+**Miniconda + Python 3.9 环境**
+```
+环境路径: ~/miniconda3/envs/madmom-env
+Python版本: 3.9.25
+已安装: madmom 0.16.1, librosa, numpy 1.23.5
+```
+
+### 激活方式
+```bash
+source ~/miniconda3/envs/madmom-env/activate.sh
+```
+
+### 测试结果
+```
+合成音频测试 (120 BPM):
+✅ RNN Beat Processor: 检测到120.0 BPM
+✅ DBN Beat Tracker: 60 beats detected
+```
+
+### 三种方法对比脚本已更新
+```bash
+source ~/miniconda3/envs/madmom-env/activate.sh
+python compare_methods.py audio.mp3
+```
+
+### 结论
+- madmom RNN+DBN组合可以精确检测节拍
+- 适合作为第三种对比方法
+- 需要conda环境隔离

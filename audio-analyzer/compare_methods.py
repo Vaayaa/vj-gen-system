@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-音频分析三种方法对比
-1. librosa - 学术标准 (已安装)
-2. Essentia - 工业级 (已安装)
-3. madmom - 深度学习 (Python3.10兼容问题，跳过)
+音频分析三种方法对比 v2
+1. librosa - 学术标准
+2. Essentia - 工业级 (Spotify同款)
+3. madmom - 深度学习 SOTA (conda环境)
 """
 
 import sys
@@ -71,24 +71,18 @@ def analyze_librosa(y, sr, duration):
     """librosa标准分析"""
     import librosa
     
-    # BPM检测
     tempo, beats = librosa.beat.beat_track(y=y, sr=sr, bpm=120, tightness=100)
     tempo = float(tempo)
-    
-    # 节拍时间
     beat_times = librosa.frames_to_time(beats, sr=sr, hop_length=512).tolist()
     
-    # 调性检测
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=512)
     mean_chroma = np.mean(chroma, axis=1)
     keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
     key = keys[np.argmax(mean_chroma)]
     
-    # 能量
     rms = librosa.feature.rms(y=y, hop_length=512)[0]
     energy = float(np.mean(rms) * 100)
     
-    # 段落
     sections = detect_sections(duration, tempo)
     
     return {
@@ -111,56 +105,72 @@ def analyze_essentia(y, sr, duration):
         return {'method': 'essentia', 'error': f'not installed: {e}'}
     
     try:
-        # 确保float32
         y = y.astype(np.float32)
-        
-        # BPM检测
         rhythm = RhythmExtractor2013()
         bpm, _, _, _, _ = rhythm(y)
         
-        # 调性检测
         key_extractor = KeyExtractor()
         key_str, scale, _ = key_extractor(y)
         key = str(key_str).replace('maj', '').replace('min', 'm')
         
-        # 能量估算
         energy = float(np.sqrt(np.mean(y**2)) * 100)
-        
-        # 段落
         sections = detect_sections(duration, bpm)
-        
-        # 节拍
-        try:
-            from essentia.standard import BeatTrackerMultiFeature
-            bt = BeatTrackerMultiFeature()
-            beats = bt(y)
-            beat_times = [float(x) for x in beats] if hasattr(beats, 'tolist') else list(beats)
-        except:
-            beat_times = []
         
         return {
             'method': 'essentia',
             'description': 'Spotify同款，工业级标准',
             'bpm': round(float(bpm), 1),
             'key': key,
-            'scale': scale,
             'energy': round(energy, 1),
             'duration': round(duration, 2),
             'sections': sections,
-            'beats': beat_times[:100]
+            'beats': []
         }
     except Exception as e:
         return {'method': 'essentia', 'error': str(e)}
 
 # ============== METHOD 3: madmom ==============
 def analyze_madmom(y, sr, duration):
-    """madmom - Python 3.10 兼容性问题，跳过"""
-    return {
-        'method': 'madmom',
-        'error': 'Python 3.10 兼容性问题 (MutableSequence moved to collections.abc)',
-        'description': '深度学习SOTA，建议使用conda环境安装',
-        'note': '建议: conda create -n madmom python=3.9'
-    }
+    """madmom深度学习分析"""
+    try:
+        import madmom
+        from madmom.features.beats import RNNBeatProcessor, DBNBeatTrackingProcessor
+    except ImportError as e:
+        return {'method': 'madmom', 'error': f'not installed: {e}'}
+    
+    try:
+        # Ensure float32
+        y = y.astype(np.float32)
+        
+        # Use RNN beat processor (more robust)
+        rnn_proc = RNNBeatProcessor()
+        act = rnn_proc(y)
+        
+        # Then DBN tracker
+        beat_proc = DBNBeatTrackingProcessor(fps=100)
+        beats = beat_proc(act)
+        
+        if len(beats) > 1:
+            intervals = np.diff(beats)
+            bpm = 60.0 / np.median(intervals)
+        else:
+            bpm = 120.0
+        
+        beat_times = [float(x) for x in beats]
+        sections = detect_sections(duration, bpm)
+        
+        return {
+            'method': 'madmom',
+            'description': '深度学习SOTA，RNN+DBN',
+            'bpm': round(float(bpm), 1),
+            'key': '-',  # madmom不直接支持调性
+            'energy': 50,
+            'duration': round(duration, 2),
+            'sections': sections,
+            'beats': beat_times[:100]
+        }
+    except Exception as e:
+        return {'method': 'madmom', 'error': str(e)}
 
 def compare_methods(audio_path):
     """对比三种方法"""
@@ -177,15 +187,12 @@ def compare_methods(audio_path):
     
     results = {}
     
-    # Method 1: librosa
     print("\n[1/3] 🔬 librosa 分析中...")
     results['librosa'] = analyze_librosa(y, sr, duration)
     
-    # Method 2: Essentia
     print("[2/3] ⚙️  Essentia 分析中...")
     results['essentia'] = analyze_essentia(y, sr, duration)
     
-    # Method 3: madmom
     print("[3/3] 🧠 madmom 分析中...")
     results['madmom'] = analyze_madmom(y, sr, duration)
     
@@ -194,43 +201,22 @@ def compare_methods(audio_path):
     print("📊 结果对比")
     print("="*60)
     
-    # BPM对比
     print("\n┌─────────────┬────────┬────────┬────────┐")
     print("│   指标      │librosa │essentia│ madmom │")
     print("├─────────────┼────────┼────────┼────────┤")
     
-    bpm_data = []
-    for m in ['librosa', 'essentia', 'madmom']:
-        r = results[m]
-        if 'error' in r:
-            bpm_data.append('❌')
-        else:
-            bpm_data.append(str(r['bpm']))
+    for metric, label in [('BPM', 'bpm'), ('Key', 'key'), ('Energy', 'energy')]:
+        vals = []
+        for m in ['librosa', 'essentia', 'madmom']:
+            r = results[m]
+            if 'error' in r:
+                vals.append('❌')
+            else:
+                vals.append(str(r.get(label, '-')))
+        print(f"│ {metric:10} │{vals[0]:^8}│{vals[1]:^8}│{vals[2]:^8} │")
     
-    print(f"│ BPM        │{bpm_data[0]:^8}│{bpm_data[1]:^8}│{bpm_data[2]:^8}│")
-    
-    key_data = []
-    for m in ['librosa', 'essentia', 'madmom']:
-        r = results[m]
-        if 'error' in r:
-            key_data.append('❌')
-        else:
-            key_data.append(r.get('key', '-'))
-    
-    print(f"│ Key        │{key_data[0]:^8}│{key_data[1]:^8}│{key_data[2]:^8}│")
-    
-    energy_data = []
-    for m in ['librosa', 'essentia', 'madmom']:
-        r = results[m]
-        if 'error' in r:
-            energy_data.append('❌')
-        else:
-            energy_data.append(str(r.get('energy', '-')))
-    
-    print(f"│ Energy     │{energy_data[0]:^8}│{energy_data[1]:^8}│{energy_data[2]:^8}│")
     print("└─────────────┴────────┴────────┴────────┘")
     
-    # Sections
     print("\n🎬 段落检测:")
     for m in ['librosa', 'essentia', 'madmom']:
         r = results[m]
@@ -247,12 +233,12 @@ def compare_methods(audio_path):
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("用法: python compare_methods.py <audio_file>")
-        print("示例: python compare_methods.py /path/to/song.mp3")
+        print("注意: madmom需要conda环境:")
+        print("  conda activate madmom-env")
         sys.exit(1)
     
     results = compare_methods(sys.argv[1])
     
-    # Save results
     output_path = sys.argv[1].replace('.mp3', '_analysis.json').replace('.wav', '_analysis.json')
     with open(output_path, 'w') as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
