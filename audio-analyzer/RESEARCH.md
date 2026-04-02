@@ -295,3 +295,29 @@ source ~/miniconda3/envs/madmom-env/activate.sh
 cd ~/openclaw-media/projects/vj-gen-system/audio-server
 python3 server.py
 ```
+
+---
+
+## 十、实测总结 (2026-04-02 深夜)
+
+### 关键发现
+
+| 方法 | BPM | 精度 | 特点 |
+|------|-----|------|------|
+| librosa | 120.0 | ⭐⭐⭐ | 可能是2x关系 |
+| Essentia | 98.5 | ⭐⭐⭐⭐ | 工业级 |
+| madmom | 98.4 | ⭐⭐⭐⭐⭐ | 与Essentia高度一致 |
+
+**结论**: 歌曲真实BPM约98-100，librosa可能检测到half time。
+
+### 准确度排序
+1. madmom ⭐⭐⭐⭐⭐
+2. Essentia ⭐⭐⭐⭐
+3. librosa ⭐⭐⭐
+
+### 推荐方案
+最终BPM = (Essentia + madmom) / 2
+
+### 文件
+- `full_compare.py` - 三方法对比脚本
+- `ANALYSIS_SUMMARY.md` - 分析总结
