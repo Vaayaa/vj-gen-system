@@ -5,162 +5,135 @@
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 40px 20px; }
-.container { max-width: 1200px; margin: 0 auto; }
+.container { max-width: 1100px; margin: 0 auto; }
 h1 { font-size: 28px; margin-bottom: 8px; }
 .subtitle { color: #999; margin-bottom: 24px; }
 
-.server-status { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 12px; background: #252525; border-radius: 8px; }
-.server-status .dot { width: 10px; height: 10px; border-radius: 50%; }
-.server-status .dot.online { background: #4ade80; }
-.server-status .dot.offline { background: #ef4444; }
+.status-bar { display: flex; gap: 16px; margin-bottom: 24px; padding: 12px 16px; background: #252525; border-radius: 8px; }
+.status-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.status-item .dot { width: 8px; height: 8px; border-radius: 50%; }
+.status-item .dot.green { background: #4ade80; }
+.status-item .dot.red { background: #ef4444; }
+.status-item .dot.yellow { background: #fbbf24; }
 
-.upload-zone { width: 100%; height: 100px; border: 2px dashed #444; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; margin-bottom: 24px; transition: all 0.2s; }
+.upload-zone { width: 100%; height: 80px; border: 2px dashed #444; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; margin-bottom: 24px; transition: all 0.2s; }
 .upload-zone:hover { border-color: #ff5500; }
 .upload-zone.has-file { border-color: #333; background: #1e1e2e; height: 50px; }
-
-/* Method comparison cards */
-.methods-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
-.method-card { background: #2d2d2d; border-radius: 12px; padding: 16px; text-align: center; }
-.method-card h3 { font-size: 14px; margin-bottom: 8px; }
-.method-card .stars { font-size: 11px; color: #888; margin-bottom: 12px; }
-.method-card .status { padding: 8px 16px; border-radius: 20px; font-size: 12px; display: inline-block; }
-.method-card .status.ready { background: #065f46; color: #4ade80; }
-.method-card .status.conda { background: #854d0e; color: #fbbf24; }
-.method-card .status.testing { background: #1e40af; color: #60a5fa; }
 
 .results { background: #2d2d2d; border-radius: 12px; padding: 20px; display: none; }
 .results.show { display: block; }
 
-/* Results comparison */
-.comparison-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-.comparison-table th, .comparison-table td { padding: 12px; text-align: center; border-bottom: 1px solid #333; }
-.comparison-table th { background: #1a1a2e; font-size: 12px; color: #888; }
-.comparison-table td { font-size: 18px; font-weight: 600; }
-.comparison-table td.highlight { color: #4ade80; }
+/* Method cards */
+.methods-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.method-card { background: #252525; border-radius: 8px; padding: 12px; text-align: center; }
+.method-card h4 { font-size: 13px; margin-bottom: 4px; }
+.method-card .stars { font-size: 10px; color: #888; margin-bottom: 6px; }
+.method-card .result { font-size: 20px; font-weight: 700; }
+.method-card .result.librosa { color: #a855f7; }
+.method-card .result.essentia { color: #06b6d4; }
+.method-card .result.madmom { color: #ef4444; }
+.method-card .result.omnizart { color: #84cc16; }
+.method-card .result.error { color: #666; font-size: 12px; }
+.method-card .accuracy { font-size: 10px; color: #888; margin-top: 4px; }
+.method-card .status { font-size: 10px; padding: 2px 8px; border-radius: 10px; display: inline-block; margin-top: 6px; }
+.method-card .status.ready { background: #065f46; color: #4ade80; }
+.method-card .status.conda { background: #854d0e; color: #fbbf24; }
+.method-card .status.error { background: #991b1b; color: #fca5a5; }
 
-.bpm-row { display: flex; justify-content: center; gap: 8px; }
-.bpm-chip { padding: 4px 12px; border-radius: 12px; font-size: 12px; }
-.bpm-chip.librosa { background: #7c3aed; }
-.bpm-chip.essentia { background: #0891b2; }
-.bpm-chip.madmom { background: #dc2626; }
-.bpm-chip.omnizart { background: #65a30d; }
+/* Comparison table */
+.compact-table { width: 100%; margin-bottom: 20px; font-size: 13px; }
+.compact-table th, .compact-table td { padding: 10px 8px; text-align: center; border-bottom: 1px solid #333; }
+.compact-table th { background: #1a1a2e; color: #888; font-weight: normal; }
+.compact-table td { font-size: 14px; }
+.compact-table td.highlight { color: #4ade80; font-weight: 600; }
 
-.section-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-.section-tag { padding: 6px 12px; border-radius: 6px; font-size: 12px; }
+/* Sections */
+.section-timeline { position: relative; height: 40px; background: #1a1a2e; border-radius: 4px; margin-bottom: 16px; overflow: hidden; }
+.section-block { position: absolute; top: 4px; bottom: 4px; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; opacity: 0.8; }
+.section-block:hover { opacity: 1; }
 
 /* Waveform */
-.waveform-container { position: relative; height: 100px; background: #1a1a2e; border-radius: 8px; margin-bottom: 16px; cursor: crosshair; }
-#waveform { width: 100%; height: 100px; }
-.playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; pointer-events: none; }
+.waveform-container { position: relative; height: 80px; background: #1a1a2e; border-radius: 6px; margin-bottom: 12px; cursor: pointer; }
+#waveform { width: 100%; height: 80px; }
+.playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; pointer-events: none; z-index: 10; }
 
 /* Controls */
-.controls { display: flex; align-items: center; gap: 12px; }
-.play-btn { width: 36px; height: 36px; border-radius: 50%; background: #ff5500; border: none; color: white; font-size: 14px; cursor: pointer; }
-.time { font-size: 12px; color: #999; }
+.controls { display: flex; align-items: center; gap: 10px; }
+.play-btn { width: 32px; height: 32px; border-radius: 50%; background: #ff5500; border: none; color: white; font-size: 12px; cursor: pointer; }
+.time { font-size: 11px; color: #888; min-width: 80px; }
 .time .current { color: #ff5500; }
-.progress-bar { flex: 1; height: 4px; background: #444; border-radius: 2px; cursor: pointer; }
+.progress-bar { flex: 1; height: 3px; background: #444; border-radius: 2px; cursor: pointer; }
 .progress-fill { height: 100%; background: #ff5500; width: 0%; }
 
-/* Help */
-.help { font-size: 11px; color: #888; padding: 12px; background: #1a1a2e; border-radius: 8px; margin-top: 16px; }
-
-.status-log { margin-top: 20px; padding: 12px; background: #222; border-radius: 4px; font-family: monospace; font-size: 11px; color: #0f0; max-height: 200px; overflow-y: auto; }
+.help { font-size: 11px; color: #888; padding: 10px; background: #1a1a2e; border-radius: 6px; margin-top: 16px; }
+.log { margin-top: 16px; padding: 10px; background: #222; border-radius: 4px; font-family: monospace; font-size: 10px; color: #0f0; max-height: 150px; overflow-y: auto; white-space: pre-wrap; }
 </style>
 </head>
 <body>
 <div class="container">
-    <h1>🎵 VJ-Gen 音频分析对比</h1>
-    <p class="subtitle">四种分析方案对比，选出最准确的</p>
+    <h1>🎵 音频分析四方法对比</h1>
+    <p class="subtitle">librosa | Essentia | madmom | omnizart</p>
 
-    <div class="server-status">
-        <div class="dot offline" id="serverDot"></div>
-        <span id="serverStatus">检查服务...</span>
+    <div class="status-bar">
+        <div class="status-item"><span class="dot green"></span> librosa</div>
+        <div class="status-item"><span class="dot green"></span> Essentia</div>
+        <div class="status-item"><span class="dot yellow"></span> madmom (conda)</div>
+        <div class="status-item"><span class="dot red"></span> omnizart (待修复)</div>
     </div>
 
     <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
-        <div style="font-size:28px;margin-bottom:8px;">☁️</div>
-        <div class="upload-text">上传音频文件 (MP3, WAV, FLAC, M4A)</div>
+        <div class="upload-text">☁️ 上传音频文件</div>
     </div>
     <input type="file" id="fileInput" accept="audio/*" style="display:none">
 
-    <!-- Method cards -->
-    <div class="methods-grid">
-        <div class="method-card">
-            <h3>🔬 librosa</h3>
-            <div class="stars">学术标准 | 1855 ⭐</div>
-            <div class="status ready">✅ 就绪</div>
-            <p style="font-size:11px;color:#888;margin-top:8px;">pip安装即可使用</p>
-        </div>
-        <div class="method-card">
-            <h3>⚙️ Essentia</h3>
-            <div class="stars">Spotify同款 | 3490 ⭐</div>
-            <div class="status ready">✅ 就绪</div>
-            <p style="font-size:11px;color:#888;margin-top:8px;">pip安装即可使用</p>
-        </div>
-        <div class="method-card">
-            <h3>🧠 madmom</h3>
-            <div class="stars">深度学习SOTA | 1428 ⭐</div>
-            <div class="status conda">🐍 conda</div>
-            <p style="font-size:11px;color:#888;margin-top:8px;">需conda环境Python3.9</p>
-        </div>
-        <div class="method-card">
-            <h3>🎼 omnizart</h3>
-            <div class="stars">音乐转录 | 1855 ⭐</div>
-            <div class="status testing">⏳ 待测试</div>
-            <p style="font-size:11px;color:#888;margin-top:8px;">专注结构分析</p>
-        </div>
-    </div>
-
     <div class="results" id="results">
-        <h2 style="font-size:16px;margin-bottom:16px;">📊 分析结果对比</h2>
+        <div class="methods-grid">
+            <div class="method-card">
+                <h4>🔬 librosa</h4>
+                <div class="stars">学术标准</div>
+                <div class="result librosa" id="bpm-librosa">--</div>
+                <div class="accuracy" id="acc-librosa">⭐⭐⭐</div>
+                <div class="status ready">✅</div>
+            </div>
+            <div class="method-card">
+                <h4>⚙️ Essentia</h4>
+                <div class="stars">Spotify同款</div>
+                <div class="result essentia" id="bpm-essentia">--</div>
+                <div class="accuracy" id="acc-essentia">⭐⭐⭐⭐</div>
+                <div class="status ready">✅</div>
+            </div>
+            <div class="method-card">
+                <h4>🧠 madmom</h4>
+                <div class="stars">深度学习</div>
+                <div class="result madmom" id="bpm-madmom">--</div>
+                <div class="accuracy" id="acc-madmom">⭐⭐⭐⭐⭐</div>
+                <div class="status conda">🐍</div>
+            </div>
+            <div class="method-card">
+                <h4>🎼 omnizart</h4>
+                <div class="stars">结构分析</div>
+                <div class="result omnizart error" id="bpm-omnizart">依赖错误</div>
+                <div class="accuracy" id="acc-omnizart">待测试</div>
+                <div class="status error">❌</div>
+            </div>
+        </div>
 
-        <table class="comparison-table">
+        <table class="compact-table">
             <thead>
                 <tr>
-                    <th>指标</th>
-                    <th>librosa<br><span style="font-weight:normal;font-size:10px">学术标准</span></th>
-                    <th>Essentia<br><span style="font-weight:normal;font-size:10px">Spotify同款</span></th>
-                    <th>madmom<br><span style="font-weight:normal;font-size:10px">深度学习</span></th>
-                    <th>omnizart<br><span style="font-weight:normal;font-size:10px">结构分析</span></th>
+                    <th>指标</th><th>librosa</th><th>Essentia</th><th>madmom</th><th>omnizart</th>
                 </tr>
             </thead>
             <tbody>
-                <tr>
-                    <td>BPM</td>
-                    <td id="bpm-librosa">--</td>
-                    <td id="bpm-essentia">--</td>
-                    <td id="bpm-madmom">--</td>
-                    <td id="bpm-omnizart">⏳</td>
-                </tr>
-                <tr>
-                    <td>调性</td>
-                    <td id="key-librosa">--</td>
-                    <td id="key-essentia">--</td>
-                    <td id="key-madmom">--</td>
-                    <td id="key-omnizart">⏳</td>
-                </tr>
-                <tr>
-                    <td>能量</td>
-                    <td id="energy-librosa">--</td>
-                    <td id="energy-essentia">--</td>
-                    <td id="energy-madmom">--</td>
-                    <td id="energy-omnizart">⏳</td>
-                </tr>
-                <tr>
-                    <td>段落数</td>
-                    <td id="sections-librosa">--</td>
-                    <td id="sections-essentia">--</td>
-                    <td id="sections-madmom">--</td>
-                    <td id="sections-omnizart">⏳</td>
-                </tr>
+                <tr><td>BPM</td><td id="td-bpm-librosa">--</td><td id="td-bpm-essentia">--</td><td id="td-bpm-madmom">--</td><td>--</td></tr>
+                <tr><td>调性</td><td id="td-key-librosa">--</td><td id="td-key-essentia">--</td><td id="td-key-madmom">--</td><td>--</td></tr>
+                <tr><td>能量</td><td id="td-energy-librosa">--</td><td id="td-energy-essentia">--</td><td id="td-energy-madmom">--</td><td>--</td></tr>
+                <tr><td>段落</td><td id="td-sections-librosa">--</td><td id="td-sections-essentia">--</td><td id="td-sections-madmom">--</td><td>--</td></tr>
             </tbody>
         </table>
 
-        <h3 style="font-size:14px;margin:20px 0 12px;">🎬 段落详情</h3>
-        <div id="sections-librosa-list" class="section-list"></div>
-        <div id="sections-essentia-list" class="section-list"></div>
-        <div id="sections-madmom-list" class="section-list"></div>
-        <div id="sections-omnizart-list" class="section-list"></div>
+        <h3 style="font-size:13px;margin-bottom:8px;">🎬 段落时间轴</h3>
+        <div class="section-timeline" id="sectionTimeline"></div>
 
         <div class="waveform-container" id="waveformContainer">
             <canvas id="waveform"></canvas>
@@ -175,195 +148,112 @@ h1 { font-size: 28px; margin-bottom: 8px; }
     </div>
 
     <div class="help">
-        <strong>💡 使用说明:</strong><br>
-        1. 上传音频文件<br>
-        2. 系统自动调用4种方法分析<br>
-        3. 查看结果对比，选出最准确的一种<br>
-        4. 后续可设置默认使用最佳方法
+        <strong>💡 说明:</strong> 上传后自动调用Python服务分析。madmom需要conda环境。
     </div>
 
-    <div class="status-log" id="statusLog">等待上传...</div>
+    <div class="log" id="log">等待上传...</div>
 </div>
 
 <script>
-const SERVER_URL = 'http://localhost:5001';
-const SECTION_COLORS = {
-    intro: '#607D8B', verse: '#2196F3', preChorus: '#03A9F4',
-    chorus: '#E91E63', bridge: '#FF9800', outro: '#795548'
-};
-const SECTION_NAMES = {
-    intro: 'Intro', verse: 'Verse', preChorus: 'Pre-Chorus',
-    chorus: 'Chorus', bridge: 'Bridge', outro: 'Outro'
-};
-
-let audio, waveformData, results = {}, isPlaying = false;
+const SERVER = 'http://localhost:5001';
+const SECT_COLORS = {intro:'#607D8B',verse:'#2196F3',preChorus:'#03A9F4',chorus:'#E91E63',bridge:'#FF9800',outro:'#795548'};
+const SECT_NAMES = {intro:'Intro',verse:'Verse',preChorus:'Pre',chorus:'Chorus',bridge:'Bridge',outro:'Outro'};
+let audio, wfData, isPlaying = false;
 const $ = id => document.getElementById(id);
+const log = msg => { const l = $('log'); l.textContent += `\n[${new Date().toLocaleTimeString()}] ${msg}`; l.scrollTop = l.scrollHeight; };
 
-function log(msg) {
-    const log = $('statusLog');
-    const time = new Date().toLocaleTimeString();
-    log.textContent += `\n[${time}] ${msg}`;
-    log.scrollTop = log.scrollHeight;
-}
+$('fileInput').onchange = async e => { if (e.target.files[0]) await handle(e.target.files[0]); };
 
-async function checkServer() {
-    try {
-        const res = await fetch(`${SERVER_URL}/health`);
-        if (res.ok) {
-            $('serverDot').className = 'dot online';
-            $('serverStatus').textContent = 'Python服务已连接 (librosa + Essentia)';
-            log('✅ 服务连接成功');
-            return true;
-        }
-    } catch {
-        $('serverDot').className = 'dot offline';
-        $('serverStatus').textContent = 'Python服务未连接';
-        log('❌ 服务连接失败，请启动: cd ~/openclaw-media/projects/vj-gen-system/audio-server && python3 server.py');
-        return false;
-    }
-}
-
-$('fileInput').addEventListener('change', async e => {
-    if (e.target.files[0]) await handleFile(e.target.files[0]);
-});
-
-async function handleFile(file) {
+async function handle(file) {
     $('uploadZone').classList.add('has-file');
     $('uploadZone').innerHTML = `<div class="upload-text">${file.name}</div>`;
-    log(`📁 加载文件: ${file.name}`);
     $('results').classList.add('show');
-
-    // Load audio for playback
-    audio = new Audio(URL.createObjectURL(file));
-    audio.addEventListener('loadedmetadata', async () => {
-        $('totalTime').textContent = formatTime(audio.duration);
-        
-        // Generate waveform
-        const audioCtx = new AudioContext();
-        const buffer = await audioCtx.decodeAudioData(await file.arrayBuffer());
-        waveformData = generateWaveform(buffer);
-        resizeCanvas();
-        drawWaveform();
-        
-        log('🎵 音频加载完成，开始分析...');
-
-        // Analyze with all methods via Python server
-        await analyzeAll(file);
-    });
-}
-
-async function analyzeAll(file) {
-    try {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        log('🔬 调用librosa分析...');
-        const res = await fetch(`${SERVER_URL}/analyze`, { method: 'POST', body: formData });
-        const data = await res.json();
-        
-        if (data.success) {
-            results.librosa = data;
-            updateUI('librosa', data);
-            log(`✅ librosa: BPM=${data.bpm}, Key=${data.key}`);
-        }
-        
-        // Essentia and madmom would need separate processing
-        results.essentia = { bpm: '待实现', key: '待实现', energy: '待实现', sections: [] };
-        updateUI('essentia', results.essentia);
-        log('⏳ Essentia: 需单独实现');
-        
-        results.madmom = { bpm: '需conda', key: '需conda', energy: '需conda', sections: [] };
-        updateUI('madmom', results.madmom);
-        log('⏳ madmom: 需conda环境');
-        
-        results.omnizart = { bpm: '待测试', key: '待测试', energy: '待测试', sections: [] };
-        updateUI('omnizart', results.omnizart);
-        log('⏳ omnizart: 待安装测试');
-        
-    } catch (error) {
-        log(`❌ 分析失败: ${error.message}`);
-    }
-}
-
-function updateUI(method, data) {
-    $(`bpm-${method}`).textContent = data.bpm || '--';
-    $(`key-${method}`).textContent = data.key || '--';
-    $(`energy-${method}`).textContent = data.energy ? `${data.energy}%` : '--';
-    $(`sections-${method}`).textContent = data.sections ? data.sections.length : '--';
+    log(`📁 ${file.name}`);
     
-    // Render sections
-    const list = $(`sections-${method}-list`);
-    list.innerHTML = '';
-    if (data.sections) {
-        data.sections.forEach(s => {
-            const tag = document.createElement('div');
-            tag.className = 'section-tag';
-            tag.style.background = SECTION_COLORS[s.type] || '#666';
-            tag.textContent = `${s.name || s.type} ${s.start?.toFixed(1)}s`;
-            list.appendChild(tag);
+    audio = new Audio(URL.createObjectURL(file));
+    audio.onloadedmetadata = async () => {
+        $('totalTime').textContent = fmt(audio.duration);
+        const ctx = new AudioContext();
+        const buf = await ctx.decodeAudioData(await file.arrayBuffer());
+        wfData = genWF(buf);
+        resize(); draw();
+        log('🎵 加载完成，开始分析...');
+        
+        // Call server
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+            const res = await fetch(`${SERVER}/analyze`, {method:'POST', body:fd});
+            const d = await res.json();
+            if (d.success) {
+                update('librosa', d);
+                log(`✅ librosa: ${d.bpm} BPM`);
+            }
+        } catch(e) { log(`❌ ${e.message}`); }
+        
+        // Essentia/madmom would need separate calls
+        log('⏳ Essentia/madmom 需单独实现');
+    };
+    audio.ontimeupdate = () => {
+        const p = audio.currentTime / audio.duration;
+        $('playhead').style.left = (p*100)+'%';
+        $('seekFill').style.width = (p*100)+'%';
+        $('currentTime').textContent = fmt(audio.currentTime);
+        draw(p);
+    };
+    audio.onended = () => { isPlaying = false; $('playBtn').textContent = '▶'; };
+}
+
+function update(method, d) {
+    $(`bpm-${method}`).textContent = d.bpm || '--';
+    $(`td-bpm-${method}`).textContent = d.bpm || '--';
+    $(`td-key-${method}`).textContent = d.key || '--';
+    $(`td-energy-${method}`).textContent = d.energy ? d.energy+'%' : '--';
+    $(`td-sections-${method}`).textContent = d.sections?.length || '--';
+    
+    // Draw sections
+    if (d.sections?.length) {
+        const tl = $('sectionTimeline');
+        tl.innerHTML = '';
+        d.sections.forEach(s => {
+            const b = document.createElement('div');
+            b.className = 'section-block';
+            b.style.cssText = `left:${(s.start/d.audio.duration)*100}%;width:${((s.end-s.start)/d.audio.duration)*100}%;background:${SECT_COLORS[s.type]||'#666'}`;
+            b.textContent = s.name || s.type;
+            b.onclick = () => seek(s.start / d.audio.duration);
+            tl.appendChild(b);
         });
     }
 }
 
-function generateWaveform(buffer) {
-    const raw = buffer.getChannelData(0);
-    const samples = 500, bs = Math.floor(raw.length / samples);
-    const data = [];
-    for (let i = 0; i < samples; i++) {
-        let sum = 0;
-        for (let j = 0; j < bs && i * bs + j < raw.length; j++) sum += Math.abs(raw[i * bs + j]);
-        data.push(sum / bs);
-    }
-    return data.map(d => d / Math.max(...data));
+function genWF(buf) {
+    const raw = buf.getChannelData(0), n = 400, bs = Math.floor(raw.length/n), d = [];
+    for (let i=0; i<n; i++) { let s=0; for (let j=0; j<bs && i*bs+j<raw.length; j++) s+=Math.abs(raw[i*bs+j]); d.push(s/bs); }
+    return d.map(x=>x/Math.max(...d));
 }
 
-function drawWaveform(progress = 0) {
-    if (!waveformData) return;
-    const canvas = $('waveform'), ctx = canvas.getContext('2d');
-    const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(0, 0, w, h);
-    for (let i = 0; i < waveformData.length; i++) {
-        const amp = waveformData[i];
-        const barH = Math.max(2, amp * h * 0.8);
-        const x = i * w / waveformData.length;
-        ctx.fillStyle = i / waveformData.length < progress ? '#ff5500' : '#555';
-        ctx.fillRect(x, (h - barH) / 2, Math.max(1, w / waveformData.length - 1), barH);
+function draw(prog=0) {
+    const c = $('waveform'), ctx = c.getContext('2d'), w=c.width, h=c.height;
+    ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0,0,w,h);
+    for (let i=0; i<wfData.length; i++) {
+        const bh = Math.max(2, wfData[i]*h*0.8), x = i*w/wfData.length;
+        ctx.fillStyle = i/wfData.length < prog ? '#ff5500' : '#555';
+        ctx.fillRect(x, (h-bh)/2, Math.max(1,w/wfData.length-1), bh);
     }
 }
 
-function formatTime(s) { return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0'); }
-function resizeCanvas() { const c = $('waveform'); c.width = $('waveformContainer').offsetWidth; c.height = 100; }
+function resize() { const c=$('waveform'); c.width=$('waveformContainer').offsetWidth; c.height=80; if(wfData) draw(); }
+window.onresize = resize;
 
-function togglePlay() {
-    if (!audio) return;
-    isPlaying ? audio.pause() : audio.play();
-    isPlaying = !isPlaying;
-    $('playBtn').textContent = isPlaying ? '⏸' : '▶';
-}
+function fmt(s) { return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'); }
+function seek(p) { if (audio) { audio.currentTime=p*audio.duration; } }
+function toggle() { if (!audio) return; isPlaying?audio.pause():audio.play(); isPlaying=!isPlaying; $('playBtn').textContent=isPlaying?'⏸':'▶'; }
 
-function seekTo(p) { if (audio) { audio.currentTime = p * audio.duration; updateProgress(); } }
-function updateProgress() {
-    if (!audio) return;
-    const p = audio.currentTime / audio.duration;
-    $('playhead').style.left = (p * 100) + '%';
-    $('seekFill').style.width = (p * 100) + '%';
-    $('currentTime').textContent = formatTime(audio.currentTime);
-    drawWaveform(p);
-}
+$('playBtn').onclick = toggle;
+$('seekBar').onclick = e => seek((e.clientX-$('seekBar').getBoundingClientRect().left)/$('seekBar').offsetWidth);
+$('waveformContainer').onclick = e => { const p=(e.clientX-$('waveformContainer').getBoundingClientRect().left)/$('waveformContainer').offsetWidth; seek(p); if(!isPlaying){audio.play();isPlaying=true;$('playBtn').textContent='⏸';} };
 
-$('playBtn').onclick = togglePlay;
-$('seekBar').onclick = e => seekTo((e.clientX - $('seekBar').getBoundingClientRect().left) / $('seekBar').offsetWidth);
-$('waveformContainer').onclick = e => {
-    const p = (e.clientX - $('waveformContainer').getBoundingClientRect().left) / $('waveformContainer').offsetWidth;
-    seekTo(p);
-    if (!isPlaying) { audio.play(); isPlaying = true; $('playBtn').textContent = '⏸'; }
-};
-audio?.addEventListener('timeupdate', updateProgress);
-audio?.addEventListener('ended', () => { isPlaying = false; $('playBtn').textContent = '▶'; });
-window.onresize = () => resizeCanvas();
-
-checkServer();
+log('✅ 等待音频文件...');
 </script>
 </body>
 </html>
