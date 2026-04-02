@@ -148,17 +148,21 @@ h1 { font-size: 28px; margin-bottom: 8px; }
     </div>
 
     <div class="help">
-        <strong>💡 说明:</strong> 上传后自动调用Python服务分析。madmom需要conda环境。
+        <strong>💡 说明:</strong> 上传后自动调用Python服务分析。madmom需要conda环境: <code>source ~/miniconda3/envs/madmom-env/activate.sh</code>
     </div>
 
-    <div class="log" id="log">等待上传...</div>
+    <div class="log" id="log">等待上传...
+    
+    运行对比脚本:
+    cd ~/openclaw-media/projects/vj-gen-system/audio-analyzer
+    python3 full_compare.py audio.mp3</div>
 </div>
 
 <script>
 const SERVER = 'http://localhost:5001';
 const SECT_COLORS = {intro:'#607D8B',verse:'#2196F3',preChorus:'#03A9F4',chorus:'#E91E63',bridge:'#FF9800',outro:'#795548'};
 const SECT_NAMES = {intro:'Intro',verse:'Verse',preChorus:'Pre',chorus:'Chorus',bridge:'Bridge',outro:'Outro'};
-let audio, wfData, isPlaying = false;
+let audio, wfData, isPlaying = false, analysisData = null;
 const $ = id => document.getElementById(id);
 const log = msg => { const l = $('log'); l.textContent += `\n[${new Date().toLocaleTimeString()}] ${msg}`; l.scrollTop = l.scrollHeight; };
 
@@ -186,13 +190,14 @@ async function handle(file) {
             const res = await fetch(`${SERVER}/analyze`, {method:'POST', body:fd});
             const d = await res.json();
             if (d.success) {
+                analysisData = d;
                 update('librosa', d);
-                log(`✅ librosa: ${d.bpm} BPM`);
+                log(`✅ librosa: ${d.bpm} BPM, Key=${d.key}`);
             }
-        } catch(e) { log(`❌ ${e.message}`); }
+        } catch(e) { log(`❌ 服务错误: ${e.message}`); }
         
-        // Essentia/madmom would need separate calls
-        log('⏳ Essentia/madmom 需单独实现');
+        // Note: Essentia/madmom require separate Python environments
+        log('⏳ Essentia/madmom 需在终端运行对比脚本');
     };
     audio.ontimeupdate = () => {
         const p = audio.currentTime / audio.duration;
@@ -212,15 +217,15 @@ function update(method, d) {
     $(`td-sections-${method}`).textContent = d.sections?.length || '--';
     
     // Draw sections
-    if (d.sections?.length) {
+    if (d.sections?.length && audio) {
         const tl = $('sectionTimeline');
         tl.innerHTML = '';
         d.sections.forEach(s => {
             const b = document.createElement('div');
             b.className = 'section-block';
-            b.style.cssText = `left:${(s.start/d.audio.duration)*100}%;width:${((s.end-s.start)/d.audio.duration)*100}%;background:${SECT_COLORS[s.type]||'#666'}`;
+            b.style.cssText = `left:${(s.start/audio.duration)*100}%;width:${((s.end-s.start)/audio.duration)*100}%;background:${SECT_COLORS[s.type]||'#666'}`;
             b.textContent = s.name || s.type;
-            b.onclick = () => seek(s.start / d.audio.duration);
+            b.onclick = () => seek(s.start / audio.duration);
             tl.appendChild(b);
         });
     }
