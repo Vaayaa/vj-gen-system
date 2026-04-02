@@ -265,3 +265,33 @@ python compare_methods.py audio.mp3
 - madmom RNN+DBN组合可以精确检测节拍
 - 适合作为第三种对比方法
 - 需要conda环境隔离
+
+---
+
+## 九、四方法对比页面
+
+### 页面位置
+`/tmp/vj-audio-compare.html`
+或 `~/openclaw-media/projects/vj-gen-system/audio-analyzer/index.html`
+
+### 功能
+- 同时展示4种方法的结果
+- BPM、调性、能量、段落数对比
+- 波形播放
+- 段落标签可视化
+
+### 待实现
+- omnizart 段落检测集成
+- Essentia 详细分析
+- madmom conda环境调用
+
+### 激活madmom环境
+```bash
+source ~/miniconda3/envs/madmom-env/activate.sh
+```
+
+### 启动Python服务
+```bash
+cd ~/openclaw-media/projects/vj-gen-system/audio-server
+python3 server.py
+```
