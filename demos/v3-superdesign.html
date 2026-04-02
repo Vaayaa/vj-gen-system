@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VJ-Gen 智能创作平台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bg: {
+                            deep: '#09090b',
+                            primary: '#0f0f11',
+                            secondary: '#18181b',
+                            tertiary: '#27272a',
+                            card: '#3f3f46',
+                        },
+                        accent: {
+                            DEFAULT: '#6366f1',
+                            hover: '#818cf8',
+                            glow: 'rgba(99,102,241,0.4)',
+                        },
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        surface: {
+                            glass: 'rgba(255,255,255,0.03)',
+                            border: 'rgba(255,255,255,0.08)',
+                            hover: 'rgba(255,255,255,0.06)',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    borderRadius: {
+                        'xl': '12px',
+                        '2xl': '16px',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Glassmorphism */
+        .glass {
+            background: rgba(255,255,255,0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        
+        .glass-hover:hover {
+            background: rgba(255,255,255,0.06);
+            border-color: rgba(255,255,255,0.12);
+        }
+        
+        /* Animations */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(99,102,241,0.3); }
+            50% { box-shadow: 0 0 40px rgba(99,102,241,0.5); }
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        @keyframes slide-up {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .animate-pulse-glow { animation: pulse-glow 3s ease-in-out infinite; }
+        .animate-float { animation: float 4s ease-in-out infinite; }
+        .animate-slide-up { animation: slide-up 0.4s ease-out; }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #52525b; }
+        
+        /* Waveform */
+        .waveform-bar {
+            width: 3px;
+            background: linear-gradient(to top, #6366f1, #818cf8);
+            border-radius: 2px;
+            opacity: 0.6;
+            transition: height 0.3s ease;
+        }
+        
+        .waveform-bar:hover { opacity: 1; }
+        
+        /* Concept card */
+        .concept-card {
+            transition: all 0.2s ease;
+        }
+        
+        .concept-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+        }
+        
+        .concept-card.selected {
+            border-color: #6366f1;
+            box-shadow: 0 0 30px rgba(99,102,241,0.3);
+        }
+        
+        /* Button press */
+        .btn-press:active {
+            transform: scale(0.97);
+        }
+        
+        /* Chat message */
+        .message-enter {
+            animation: slide-up 0.3s ease-out;
+        }
+        
+        /* Gradient text */
+        .gradient-text {
+            background: linear-gradient(135deg, #fff 0%, #a5b4fc 50%, #818cf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        /* Progress line */
+        .progress-line {
+            height: 2px;
+            background: linear-gradient(90deg, #10b981, #6366f1);
+            transition: width 0.5s ease;
+        }
+    </style>
+</head>
+<body class="bg-bg-deep text-white min-h-screen overflow-hidden">
+    <div class="h-screen grid grid-cols-80px 1fr 320px">
+        
+        <!-- Left: Minimal Icons Nav -->
+        <aside class="bg-bg-primary border-r border-surface-border flex flex-col items-center py-6 gap-6">
+            <div class="w-10 h-10 rounded-xl bg-accent flex items-center justify-center text-lg font-bold animate-pulse-glow">
+                V
+            </div>
+            
+            <div class="flex-1 flex flex-col gap-3 mt-4">
+                <button class="w-12 h-12 rounded-xl bg-accent/20 border border-accent/40 flex items-center justify-center text-xl btn-press transition-all hover:bg-accent/30" title="素材">
+                    📎
+                </button>
+                <button class="w-12 h-12 rounded-xl bg-bg-tertiary border border-surface-border flex items-center justify-center text-xl btn-press transition-all hover:bg-bg-card hover:border-surface-hover" title="分析">
+                    🎵
+                </button>
+                <button class="w-12 h-12 rounded-xl bg-bg-tertiary border border-surface-border flex items-center justify-center text-xl btn-press transition-all hover:bg-bg-card hover:border-surface-hover" title="关键词">
+                    ✨
+                </button>
+                <button class="w-12 h-12 rounded-xl bg-bg-tertiary border border-surface-border flex items-center justify-center text-xl btn-press transition-all hover:bg-bg-card hover:border-surface-hover" title="概念">
+                    🎨
+                </button>
+                <button class="w-12 h-12 rounded-xl bg-bg-tertiary border border-surface-border flex items-center justify-center text-xl btn-press transition-all hover:bg-bg-card hover:border-surface-hover" title="静帧">
+                    🖼️
+                </button>
+            </div>
+            
+            <button class="w-12 h-12 rounded-xl bg-bg-tertiary border border-surface-border flex items-center justify-center text-xl btn-press transition-all hover:bg-bg-card hover:border-surface-hover" title="设置">
+                ⚙️
+            </button>
+        </aside>
+        
+        <!-- Center: Main Chat Area -->
+        <main class="flex flex-col bg-bg-deep">
+            <!-- Header -->
+            <header class="px-6 py-4 border-b border-surface-border flex items-center justify-between">
+                <div>
+                    <h1 class="text-lg font-semibold gradient-text">VJ-Gen</h1>
+                    <p class="text-xs text-zinc-500 mt-0.5">智能VJ创作平台</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs text-zinc-500">2024-001</span>
+                    <div class="px-3 py-1.5 rounded-full bg-success/20 text-success text-xs font-medium flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-success animate-pulse"></span>
+                        分析完成
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Messages -->
+            <div class="flex-1 overflow-y-auto p-6 space-y-6" id="messages">
+                
+                <!-- Analysis Card 1: Audio -->
+                <div class="message-enter">
+                    <div class="flex gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-bg-tertiary flex items-center justify-center text-lg flex-shrink-0">
+                            🎵
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-medium text-sm mb-3">音频分析结果</div>
+                            
+                            <div class="glass rounded-2xl p-4 space-y-4">
+                                <!-- Waveform -->
+                                <div>
+                                    <div class="flex justify-between text-xs text-zinc-500 mb-2">
+                                        <span>BPM</span>
+                                        <span>128</span>
+                                    </div>
+                                    <div class="h-16 bg-bg-primary rounded-xl flex items-center justify-center gap-0.5 px-4" id="waveform">
+                                        <!-- Generated by JS -->
+                                    </div>
+                                </div>
+                                
+                                <!-- Stats -->
+                                <div class="grid grid-cols-3 gap-3">
+                                    <div class="bg-bg-primary rounded-xl p-3 text-center">
+                                        <div class="text-lg font-semibold text-accent">128</div>
+                                        <div class="text-xs text-zinc-500">BPM</div>
+                                    </div>
+                                    <div class="bg-bg-primary rounded-xl p-3 text-center">
+                                        <div class="text-lg font-semibold">4/4</div>
+                                        <div class="text-xs text-zinc-500">节拍</div>
+                                    </div>
+                                    <div class="bg-bg-primary rounded-xl p-3 text-center">
+                                        <div class="text-lg font-semibold">3:45</div>
+                                        <div class="text-xs text-zinc-500">时长</div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Sections -->
+                                <div class="flex gap-2 flex-wrap">
+                                    <span class="px-3 py-1 rounded-full bg-zinc-800 text-xs">intro 0-15s</span>
+                                    <span class="px-3 py-1 rounded-full bg-zinc-800 text-xs">verse 15-45s</span>
+                                    <span class="px-3 py-1 rounded-full bg-accent/30 border border-accent/50 text-xs">chorus 45-90s</span>
+                                    <span class="px-3 py-1 rounded-full bg-zinc-800 text-xs">drop 90-135s</span>
+                                    <span class="px-3 py-1 rounded-full bg-zinc-800 text-xs">outro 135-180s</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Analysis Card 2: Lyrics -->
+                <div class="message-enter">
+                    <div class="flex gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-bg-tertiary flex items-center justify-center text-lg flex-shrink-0">
+                            📝
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-medium text-sm mb-3">歌词时间轴</div>
+                            
+                            <div class="glass rounded-2xl overflow-hidden">
+                                <div class="divide-y divide-surface-border">
+                                    <div class="px-4 py-3 flex gap-4 items-center hover:bg-surface-hover transition-colors">
+                                        <span class="font-mono text-xs text-accent w-12">0:15</span>
+                                        <span class="text-sm text-zinc-300">霓虹灯光闪烁的城市</span>
+                                    </div>
+                                    <div class="px-4 py-3 flex gap-4 items-center hover:bg-surface-hover transition-colors">
+                                        <span class="font-mono text-xs text-accent w-12">0:25</span>
+                                        <span class="text-sm text-zinc-300">在黑暗中寻找方向</span>
+                                    </div>
+                                    <div class="px-4 py-3 flex gap-4 items-center bg-accent/10 hover:bg-surface-hover transition-colors">
+                                        <span class="font-mono text-xs text-accent w-12">0:45</span>
+                                        <span class="text-sm">心跳与节拍同步</span>
+                                    </div>
+                                    <div class="px-4 py-3 flex gap-4 items-center hover:bg-surface-hover transition-colors">
+                                        <span class="font-mono text-xs text-accent w-12">1:15</span>
+                                        <span class="text-sm text-zinc-300">光芒穿透夜幕</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Keywords -->
+                <div class="message-enter">
+                    <div class="flex gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-bg-tertiary flex items-center justify-center text-lg flex-shrink-0">
+                            ✨
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-medium text-sm mb-3">视觉关键词</div>
+                            
+                            <div class="flex flex-wrap gap-2">
+                                <span class="px-4 py-2 rounded-full bg-accent/20 border border-accent/40 text-sm hover:bg-accent/30 transition-colors cursor-pointer">霓虹灯光</span>
+                                <span class="px-4 py-2 rounded-full bg-accent/20 border border-accent/40 text-sm hover:bg-accent/30 transition-colors cursor-pointer">赛博朋克</span>
+                                <span class="px-4 py-2 rounded-full bg-zinc-800 text-sm hover:bg-zinc-700 transition-colors cursor-pointer">暗色调</span>
+                                <span class="px-4 py-2 rounded-full bg-zinc-800 text-sm hover:bg-zinc-700 transition-colors cursor-pointer">粒子特效</span>
+                                <span class="px-4 py-2 rounded-full bg-zinc-800 text-sm hover:bg-zinc-700 transition-colors cursor-pointer">城市夜景</span>
+                                <span class="px-4 py-2 rounded-full bg-zinc-800 text-sm hover:bg-zinc-700 transition-colors cursor-pointer">渐变光效</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Concepts -->
+                <div class="message-enter">
+                    <div class="flex gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-bg-tertiary flex items-center justify-center text-lg flex-shrink-0">
+                            🎨
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-medium text-sm mb-3">选择概念方向</div>
+                            
+                            <div class="grid grid-cols-3 gap-4">
+                                <div class="concept-card glass rounded-2xl overflow-hidden cursor-pointer" onclick="selectConcept(this)">
+                                    <div class="aspect-video bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center text-4xl">
+                                        🌃
+                                    </div>
+                                    <div class="p-3">
+                                        <div class="font-medium text-sm">赛博都市</div>
+                                        <div class="text-xs text-zinc-500 mt-0.5">霓虹 · 暗夜</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="concept-card glass rounded-2xl overflow-hidden cursor-pointer" onclick="selectConcept(this)">
+                                    <div class="aspect-video bg-gradient-to-br from-orange-900 to-red-900 flex items-center justify-center text-4xl">
+                                        ⚡
+                                    </div>
+                                    <div class="p-3">
+                                        <div class="font-medium text-sm">能量脉冲</div>
+                                        <div class="text-xs text-zinc-500 mt-0.5">粒子 · 爆发</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="concept-card selected glass rounded-2xl overflow-hidden cursor-pointer" onclick="selectConcept(this)">
+                                    <div class="aspect-video bg-gradient-to-br from-red-800 to-yellow-600 flex items-center justify-center text-4xl">
+                                        🔥
+                                    </div>
+                                    <div class="p-3">
+                                        <div class="font-medium text-sm">火焰节奏</div>
+                                        <div class="text-xs text-zinc-500 mt-0.5">红橙 · 力量</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Input Area -->
+            <div class="p-4 border-t border-surface-border bg-bg-primary">
+                <div class="flex gap-3">
+                    <div class="flex gap-2">
+                        <button class="w-11 h-11 rounded-xl bg-bg-tertiary border border-surface-border flex items-center justify-center text-lg btn-press hover:bg-bg-card transition-all" title="音频">
+                            🎵
+                        </button>
+                        <button class="w-11 h-11 rounded-xl bg-bg-tertiary border border-surface-border flex items-center justify-center text-lg btn-press hover:bg-bg-card transition-all" title="图片">
+                            🖼️
+                        </button>
+                        <button class="w-11 h-11 rounded-xl bg-bg-tertiary border border-surface-border flex items-center justify-center text-lg btn-press hover:bg-bg-card transition-all" title="视频">
+                            🎬
+                        </button>
+                    </div>
+                    
+                    <div class="flex-1 relative">
+                        <textarea 
+                            id="chat-input"
+                            placeholder="输入描述或指令..." 
+                            class="w-full h-11 px-4 bg-bg-secondary border border-surface-border rounded-xl text-sm resize-none outline-none focus:border-accent/50 transition-colors placeholder:text-zinc-600"
+                            rows="1"
+                        ></textarea>
+                    </div>
+                    
+                    <button onclick="sendMessage()" class="w-11 h-11 rounded-xl bg-accent flex items-center justify-center btn-press hover:bg-accent-hover transition-all">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Right: Preview Panel -->
+        <aside class="bg-bg-primary border-l border-surface-border flex flex-col">
+            <div class="p-4 border-b border-surface-border">
+                <h2 class="text-sm font-medium">静帧预览</h2>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-4 space-y-4">
+                <!-- Main Preview -->
+                <div class="aspect-video bg-bg-secondary rounded-2xl overflow-hidden relative group" id="main-preview">
+                    <img src="/tmp/vj-preview-cyberpunk.jpg" class="w-full h-full object-cover" alt="Preview">
+                    <div class="absolute bottom-2 right-2 px-2 py-1 bg-black/50 rounded text-xs text-white/70">
+                        赛博都市 · 45-90s
+                    </div>
+                    <!-- Hover overlay -->
+                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                        <button class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center btn-press" title="放大">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"/>
+                            </svg>
+                        </button>
+                        <button class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center btn-press" title="下载">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Generate Button -->
+                <button onclick="generatePreview()" class="w-full py-3 rounded-xl bg-accent hover:bg-accent-hover transition-all font-medium text-sm btn-press flex items-center justify-center gap-2">
+                    <span>✨</span>
+                    <span>生成静帧</span>
+                </button>
+                
+                <!-- Segments -->
+                <div class="space-y-2">
+                    <div class="text-xs text-zinc-500 font-medium">段落列表</div>
+                    
+                    <div class="space-y-2">
+                        <div class="glass rounded-xl p-3 cursor-pointer hover:bg-surface-hover transition-all" onclick="selectSegment(this)">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="font-mono text-xs text-accent">0:15</span>
+                                <span class="text-xs text-zinc-500">15s</span>
+                            </div>
+                            <div class="font-medium text-sm">intro - 构建</div>
+                            <div class="text-xs text-zinc-500 mt-1">渐入 · 霓虹</div>
+                        </div>
+                        
+                        <div class="glass rounded-xl p-3 cursor-pointer bg-accent/10 border border-accent/30" onclick="selectSegment(this)">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="font-mono text-xs text-accent">0:30</span>
+                                <span class="text-xs text-zinc-500">30s</span>
+                            </div>
+                            <div class="font-medium text-sm">verse - 发展</div>
+                            <div class="text-xs text-zinc-500 mt-1">城市 · 霓虹</div>
+                        </div>
+                        
+                        <div class="glass rounded-xl p-3 cursor-pointer hover:bg-surface-hover transition-all" onclick="selectSegment(this)">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="font-mono text-xs text-accent">1:00</span>
+                                <span class="text-xs text-zinc-500">45s</span>
+                            </div>
+                            <div class="font-medium text-sm">chorus - 高潮</div>
+                            <div class="text-xs text-zinc-500 mt-1">爆发 · 火焰</div>
+                        </div>
+                        
+                        <div class="glass rounded-xl p-3 cursor-pointer hover:bg-surface-hover transition-all" onclick="selectSegment(this)">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="font-mono text-xs text-accent">1:45</span>
+                                <span class="text-xs text-zinc-500">30s</span>
+                            </div>
+                            <div class="font-medium text-sm">drop - 释放</div>
+                            <div class="text-xs text-zinc-500 mt-1">粒子 · 脉冲</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bottom Actions -->
+            <div class="p-4 border-t border-surface-border space-y-2">
+                <button class="w-full py-3 rounded-xl bg-bg-tertiary hover:bg-bg-card transition-all text-sm font-medium btn-press">
+                    🎬 生成视频
+                </button>
+                <button class="w-full py-3 rounded-xl border border-surface-border hover:bg-surface-hover transition-all text-sm">
+                    ⬇️ 导出项目
+                </button>
+            </div>
+        </aside>
+    </div>
+    
+    <script>
+        // Generate waveform
+        const waveform = document.getElementById('waveform');
+        for (let i = 0; i < 50; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'waveform-bar';
+            bar.style.height = (15 + Math.random() * 35) + 'px';
+            waveform.appendChild(bar);
+        }
+        
+        // Concept selection
+        function selectConcept(el) {
+            document.querySelectorAll('.concept-card').forEach(c => c.classList.remove('selected'));
+            el.classList.add('selected');
+        }
+        
+        // Segment selection
+        function selectSegment(el) {
+            document.querySelectorAll('.glass').forEach(c => {
+                if (c.querySelector('.font-mono')) {
+                    c.classList.remove('bg-accent/10', 'border', 'border-accent/30');
+                }
+            });
+            el.classList.add('bg-accent/10', 'border', 'border-accent/30');
+        }
+        
+        // Send message
+        function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+            
+            const messages = document.getElementById('messages');
+            messages.innerHTML += `
+                <div class="message-enter">
+                    <div class="flex gap-3 justify-end">
+                        <div class="max-w-md glass rounded-2xl rounded-tr-sm p-4">
+                            <p class="text-sm">${text}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            input.value = '';
+            messages.scrollTop = messages.scrollHeight;
+        }
+        
+        // Enter to send
+        document.getElementById('chat-input').addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        
+        // Generate preview with AI
+        async function generatePreview() {
+            const preview = document.getElementById('main-preview');
+            preview.innerHTML = `
+                <div class="absolute inset-0 flex items-center justify-center bg-bg-secondary">
+                    <div class="text-center">
+                        <div class="animate-float text-5xl mb-2">✨</div>
+                        <div class="text-sm text-zinc-400">生成中...</div>
+                    </div>
+                </div>
+            `;
+            
+            // Simulate generation
+            setTimeout(() => {
+                preview.innerHTML = `
+                    <div class="absolute inset-0 bg-gradient-to-br from-orange-900 via-red-900 to-yellow-800 flex items-center justify-center">
+                        <div class="text-center text-white/80">
+                            <div class="text-6xl mb-2">🔥</div>
+                            <div class="text-sm">火焰节奏 · 高潮片段</div>
+                        </div>
+                    </div>
+                    <div class="absolute bottom-2 right-2 px-2 py-1 bg-black/50 rounded text-xs text-white/70">
+                        1024×576
+                    </div>
+                `;
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

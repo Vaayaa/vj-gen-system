@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VJ-Gen 智能创作平台</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --bg-card: #222222;
+            --accent: #6366f1;
+            --accent-hover: #818cf8;
+            --accent-glow: rgba(99,102,241,0.3);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --text-primary: #ffffff;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --border: rgba(255,255,255,0.08);
+            --border-hover: rgba(255,255,255,0.15);
+            --radius: 12px;
+            --radius-lg: 16px;
+            --shadow: 0 4px 24px rgba(0,0,0,0.4);
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Layout */
+        .app {
+            display: grid;
+            grid-template-columns: 380px 1fr 320px;
+            height: 100vh;
+        }
+        
+        /* Left Panel - Workflow */
+        .panel-workflow {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .workflow-header {
+            padding: 1.25rem;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .workflow-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+        
+        .step-indicator {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .step-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            transition: all 0.3s;
+        }
+        
+        .step-dot.active { background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+        .step-dot.done { background: var(--success); }
+        
+        .step-line {
+            flex: 1;
+            height: 2px;
+            background: var(--border);
+        }
+        
+        .step-line.done { background: var(--success); }
+        
+        .workflow-steps {
+            padding: 1.25rem;
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .step {
+            display: flex;
+            gap: 1rem;
+            padding: 1rem;
+            border-radius: var(--radius);
+            margin-bottom: 0.75rem;
+            background: var(--bg-tertiary);
+            border: 1px solid transparent;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        
+        .step:hover { border-color: var(--border-hover); }
+        
+        .step.active {
+            border-color: var(--accent);
+            background: rgba(99,102,241,0.1);
+        }
+        
+        .step.done { border-color: var(--success); }
+        
+        .step-num {
+            width: 28px; height: 28px;
+            border-radius: 8px;
+            background: var(--bg-card);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+        
+        .step.active .step-num { background: var(--accent); color: white; }
+        .step.done .step-num { background: var(--success); color: white; }
+        
+        .step-content { flex: 1; }
+        .step-title { font-weight: 500; font-size: 0.9rem; margin-bottom: 0.25rem; }
+        .step-desc { font-size: 0.75rem; color: var(--text-muted); }
+        
+        /* Center - Chat/Input */
+        .panel-main {
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-primary);
+        }
+        
+        .chat-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .project-name {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+        
+        .project-status {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            padding: 0.35rem 0.75rem;
+            background: var(--bg-tertiary);
+            border-radius: 20px;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+        
+        .message {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .message-avatar {
+            width: 36px; height: 36px;
+            border-radius: 10px;
+            background: var(--bg-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        
+        .message.user .message-avatar { background: var(--accent); }
+        .message.ai .message-avatar { background: var(--bg-card); }
+        
+        .message-content { flex: 1; }
+        
+        .message-text {
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin-bottom: 0.75rem;
+        }
+        
+        .message-text p { margin-bottom: 0.5rem; }
+        
+        /* Analysis Cards */
+        .analysis-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius);
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .analysis-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+        
+        /* Waveform */
+        .waveform-viz {
+            height: 60px;
+            background: linear-gradient(180deg, rgba(99,102,241,0.1) 0%, transparent 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            padding: 0 1rem;
+        }
+        
+        .waveform-bar {
+            width: 3px;
+            background: var(--accent);
+            border-radius: 2px;
+            opacity: 0.6;
+        }
+        
+        /* Emotion Tags */
+        .emotion-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .emotion-tag {
+            padding: 0.4rem 0.75rem;
+            background: var(--bg-card);
+            border-radius: 20px;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        
+        .emotion-tag .dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+        }
+        
+        .emotion-tag.build .dot { background: #f59e0b; }
+        .emotion-tag.drop .dot { background: #ef4444; }
+        .emotion-tag.melodic .dot { background: #10b981; }
+        
+        /* Lyrics Timeline */
+        .lyrics-timeline {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 0.75rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .lyric-line {
+            display: flex;
+            gap: 0.75rem;
+            padding: 0.4rem 0;
+            font-size: 0.8rem;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .lyric-line:last-child { border-bottom: none; }
+        .lyric-time { color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; }
+        .lyric-text { color: var(--text-secondary); }
+        
+        /* Keywords */
+        .keywords-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .keyword-chip {
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        
+        .keyword-chip:hover {
+            border-color: var(--accent);
+            background: rgba(99,102,241,0.1);
+        }
+        
+        /* Concept Cards */
+        .concept-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+        
+        .concept-card {
+            background: var(--bg-card);
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .concept-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+        
+        .concept-card.selected {
+            border-color: var(--accent);
+            background: rgba(99,102,241,0.1);
+        }
+        
+        .concept-preview {
+            aspect-ratio: 16/9;
+            background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-card));
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+        }
+        
+        .concept-name {
+            font-weight: 600;
+            font-size: 0.85rem;
+            margin-bottom: 0.25rem;
+        }
+        
+        .concept-desc {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+        
+        /* Chat Input */
+        .chat-input-area {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border);
+            background: var(--bg-secondary);
+        }
+        
+        .input-container {
+            display: flex;
+            gap: 0.75rem;
+            align-items: flex-end;
+        }
+        
+        .input-box {
+            flex: 1;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 0.75rem 1rem;
+            min-height: 48px;
+            max-height: 120px;
+            overflow-y: auto;
+            font-family: inherit;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            resize: none;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        
+        .input-box:focus { border-color: var(--accent); }
+        .input-box::placeholder { color: var(--text-muted); }
+        
+        .input-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .input-btn {
+            width: 48px; height: 48px;
+            border-radius: var(--radius);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+        }
+        
+        .input-btn:hover {
+            background: var(--bg-card);
+            border-color: var(--border-hover);
+            color: var(--text-primary);
+        }
+        
+        .send-btn {
+            width: 48px; height: 48px;
+            border-radius: var(--radius);
+            background: var(--accent);
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+        }
+        
+        .send-btn:hover {
+            background: var(--accent-hover);
+            transform: scale(1.05);
+        }
+        
+        /* Right Panel - Preview */
+        .panel-preview {
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .preview-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .preview-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+        }
+        
+        .preview-area {
+            flex: 1;
+            padding: 1.25rem;
+            overflow-y: auto;
+        }
+        
+        .preview-screen {
+            aspect-ratio: 16/9;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .preview-screen img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .preview-placeholder {
+            text-align: center;
+            color: var(--text-muted);
+        }
+        
+        .preview-placeholder-icon {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            opacity: 0.5;
+        }
+        
+        .segment-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .segment-item {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 0.75rem;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .segment-item:hover { border-color: var(--border-hover); }
+        .segment-item.active { border-color: var(--accent); }
+        
+        .segment-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+        
+        .segment-time {
+            font-size: 0.7rem;
+            color: var(--accent);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .segment-duration {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+        
+        .segment-title {
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+        }
+        
+        .segment-style {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--bg-card); border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Left: Workflow Progress -->
+        <aside class="panel-workflow">
+            <div class="workflow-header">
+                <div class="workflow-title">创作进度</div>
+                <div class="step-indicator">
+                    <div class="step-dot done"></div>
+                    <div class="step-line done"></div>
+                    <div class="step-dot active"></div>
+                    <div class="step-line"></div>
+                    <div class="step-dot"></div>
+                    <div class="step-line"></div>
+                    <div class="step-dot"></div>
+                </div>
+            </div>
+            
+            <div class="workflow-steps">
+                <div class="step done" onclick="jumpToStep(1)">
+                    <div class="step-num">✓</div>
+                    <div class="step-content">
+                        <div class="step-title">上传素材</div>
+                        <div class="step-desc">音频 + 歌词 + 参考</div>
+                    </div>
+                </div>
+                
+                <div class="step active" onclick="jumpToStep(2)">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <div class="step-title">AI 分析</div>
+                        <div class="step-desc">音频 · 歌词 · 艺人背景</div>
+                    </div>
+                </div>
+                
+                <div class="step" onclick="jumpToStep(3)">
+                    <div class="step-num">3</div>
+                    <div class="step-content">
+                        <div class="step-title">关键词生成</div>
+                        <div class="step-desc">视觉风格关键词</div>
+                    </div>
+                </div>
+                
+                <div class="step" onclick="jumpToStep(4)">
+                    <div class="step-num">4</div>
+                    <div class="step-content">
+                        <div class="step-title">概念方向</div>
+                        <div class="step-desc">3-5个可选方案</div>
+                    </div>
+                </div>
+                
+                <div class="step" onclick="jumpToStep(5)">
+                    <div class="step-num">5</div>
+                    <div class="step-content">
+                        <div class="step-title">静帧生成</div>
+                        <div class="step-desc">分段落生成静帧</div>
+                    </div>
+                </div>
+                
+                <div class="step" onclick="jumpToStep(6)">
+                    <div class="step-num">6</div>
+                    <div class="step-content">
+                        <div class="step-title">视频输出</div>
+                        <div class="step-desc">最终视频生成</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- Center: Chat & Input -->
+        <main class="panel-main">
+            <div class="chat-header">
+                <div class="project-name">VJ-2024-001</div>
+                <div class="project-status">● 分析中</div>
+            </div>
+            
+            <div class="chat-messages" id="chat-messages">
+                <!-- AI Analysis Message -->
+                <div class="message ai">
+                    <div class="message-avatar">🎵</div>
+                    <div class="message-content">
+                        <div class="message-text">
+                            <p>✅ <strong>音频分析完成</strong></p>
+                            
+                            <div class="analysis-card">
+                                <div class="analysis-title">节拍分析</div>
+                                <div class="waveform-viz" id="waveform">
+                                    <!-- Generated by JS -->
+                                </div>
+                                <div style="display:flex;justify-content:space-between;margin-top:0.75rem;font-size:0.75rem;color:var(--text-muted);">
+                                    <span>BPM: 128</span>
+                                    <span>4/4</span>
+                                    <span>3:45</span>
+                                </div>
+                            </div>
+                            
+                            <div class="analysis-card">
+                                <div class="analysis-title">情绪分析</div>
+                                <div class="emotion-tags">
+                                    <div class="emotion-tag build"><span class="dot"></span>构建 (0-45s)</div>
+                                    <div class="emotion-tag drop"><span class="dot"></span>高潮 (45-90s)</div>
+                                    <div class="emotion-tag melodic"><span class="dot"></span>旋律 (90-180s)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="message ai">
+                    <div class="message-avatar">📝</div>
+                    <div class="message-content">
+                        <div class="message-text">
+                            <p>✅ <strong>歌词分析完成</strong></p>
+                            
+                            <div class="analysis-card">
+                                <div class="analysis-title">时间轴</div>
+                                <div class="lyrics-timeline">
+                                    <div class="lyric-line">
+                                        <span class="lyric-time">0:15</span>
+                                        <span class="lyric-text">霓虹灯光闪烁的城市</span>
+                                    </div>
+                                    <div class="lyric-line">
+                                        <span class="lyric-time">0:25</span>
+                                        <span class="lyric-text">在黑暗中寻找方向</span>
+                                    </div>
+                                    <div class="lyric-line">
+                                        <span class="lyric-time">0:45</span>
+                                        <span class="lyric-text">心跳与节拍同步</span>
+                                    </div>
+                                    <div class="lyric-line">
+                                        <span class="lyric-time">1:15</span>
+                                        <span class="lyric-text">光芒穿透夜幕</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="message ai">
+                    <div class="message-avatar">✨</div>
+                    <div class="message-content">
+                        <div class="message-text">
+                            <p>✅ <strong>已生成视觉关键词</strong></p>
+                            
+                            <div class="analysis-card">
+                                <div class="analysis-title">核心视觉词</div>
+                                <div class="keywords-grid">
+                                    <div class="keyword-chip">霓虹灯光</div>
+                                    <div class="keyword-chip">赛博朋克</div>
+                                    <div class="keyword-chip">暗色调</div>
+                                    <div class="keyword-chip">粒子特效</div>
+                                    <div class="keyword-chip">城市夜景</div>
+                                    <div class="keyword-chip">渐变光效</div>
+                                    <div class="keyword-chip">节奏脉冲</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="message ai">
+                    <div class="message-avatar">🎨</div>
+                    <div class="message-content">
+                        <div class="message-text">
+                            <p><strong>请选择概念方向</strong>（点击选择或调整）</p>
+                            
+                            <div class="concept-grid">
+                                <div class="concept-card" onclick="selectConcept(this)">
+                                    <div class="concept-preview">🌃</div>
+                                    <div class="concept-name">赛博都市</div>
+                                    <div class="concept-desc">霓虹 · 暗夜 · 高对比</div>
+                                </div>
+                                <div class="concept-card" onclick="selectConcept(this)">
+                                    <div class="concept-preview">⚡</div>
+                                    <div class="concept-name">能量脉冲</div>
+                                    <div class="concept-desc">粒子 · 爆发 · 动态</div>
+                                </div>
+                                <div class="concept-card" onclick="selectConcept(this)">
+                                    <div class="concept-preview">🌊</div>
+                                    <div class="concept-name">流动光影</div>
+                                    <div class="concept-desc">渐变 · 柔和 · 诗意</div>
+                                </div>
+                                <div class="concept-card selected" onclick="selectConcept(this)">
+                                    <div class="concept-preview">🔥</div>
+                                    <div class="concept-name">火焰节奏</div>
+                                    <div class="concept-desc">红橙 · 爆发 · 力量</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chat-input-area">
+                <div class="input-container">
+                    <textarea class="input-box" placeholder="输入消息或描述..." id="chat-input"></textarea>
+                    <div class="input-actions">
+                        <button class="input-btn" title="上传音频">🎵</button>
+                        <button class="input-btn" title="上传图片">🖼️</button>
+                        <button class="input-btn" title="上传视频">🎬</button>
+                    </div>
+                    <button class="send-btn" onclick="sendMessage()">➤</button>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Right: Preview -->
+        <aside class="panel-preview">
+            <div class="preview-header">
+                <div class="preview-title">静帧预览</div>
+            </div>
+            
+            <div class="preview-area">
+                <div class="preview-screen" id="preview-screen">
+                    <div class="preview-placeholder">
+                        <div class="preview-placeholder-icon">🖼️</div>
+                        <div>选择概念后预览</div>
+                    </div>
+                </div>
+                
+                <div class="preview-title" style="margin:1rem 0 0.75rem;">段落列表</div>
+                
+                <div class="segment-list">
+                    <div class="segment-item" onclick="selectSegment(this, 0)">
+                        <div class="segment-header">
+                            <span class="segment-time">0:00</span>
+                            <span class="segment-duration">15s</span>
+                        </div>
+                        <div class="segment-title">intro - 构建</div>
+                        <div class="segment-style">渐入 · 霓虹</div>
+                    </div>
+                    
+                    <div class="segment-item active" onclick="selectSegment(this, 1)">
+                        <div class="segment-header">
+                            <span class="segment-time">0:15</span>
+                            <span class="segment-duration">30s</span>
+                        </div>
+                        <div class="segment-title">verse - 发展</div>
+                        <div class="segment-style">城市 · 霓虹</div>
+                    </div>
+                    
+                    <div class="segment-item" onclick="selectSegment(this, 2)">
+                        <div class="segment-header">
+                            <span class="segment-time">0:45</span>
+                            <span class="segment-duration">45s</span>
+                        </div>
+                        <div class="segment-title">chorus - 高潮</div>
+                        <div class="segment-style">爆发 · 火焰</div>
+                    </div>
+                    
+                    <div class="segment-item" onclick="selectSegment(this, 3)">
+                        <div class="segment-header">
+                            <span class="segment-time">1:30</span>
+                            <span class="segment-duration">30s</span>
+                        </div>
+                        <div class="segment-title">drop - 释放</div>
+                        <div class="segment-style">粒子 · 脉冲</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+    
+    <script>
+        // Generate waveform
+        const waveform = document.getElementById('waveform');
+        for (let i = 0; i < 60; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'waveform-bar';
+            bar.style.height = (20 + Math.random() * 40) + 'px';
+            waveform.appendChild(bar);
+        }
+        
+        function jumpToStep(n) {
+            document.querySelectorAll('.step').forEach((el, i) => {
+                el.classList.remove('active');
+                if (i < n - 1) el.classList.add('done');
+                if (i === n - 1) el.classList.add('active');
+            });
+        }
+        
+        function selectConcept(el) {
+            document.querySelectorAll('.concept-card').forEach(c => c.classList.remove('selected'));
+            el.classList.add('selected');
+        }
+        
+        function selectSegment(el, idx) {
+            document.querySelectorAll('.segment-item').forEach(s => s.classList.remove('active'));
+            el.classList.add('active');
+        }
+        
+        function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+            
+            // Add user message
+            const messages = document.getElementById('chat-messages');
+            messages.innerHTML += `
+                <div class="message user">
+                    <div class="message-avatar">👤</div>
+                    <div class="message-content">
+                        <div class="message-text"><p>${text}</p></div>
+                    </div>
+                </div>
+            `;
+            
+            input.value = '';
+            messages.scrollTop = messages.scrollHeight;
+        }
+        
+        // Enter to send
+        document.getElementById('chat-input').addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

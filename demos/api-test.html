@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VJ-Gen API 集成测试</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #050508;
+            --bg-dark: #0a0a0f;
+            --bg-card: #111118;
+            --accent: #6366f1;
+            --accent-glow: rgba(99,102,241,0.4);
+            --success: #10b981;
+            --error: #ef4444;
+            --text: #e2e8f0;
+            --text-muted: #64748b;
+            --font-display: 'Sora', sans-serif;
+            --font-mono: 'Space Mono', monospace;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: var(--font-display);
+            background: var(--bg-deep);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        
+        .container { max-width: 900px; margin: 0 auto; }
+        
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #fff, #a5b4fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .subtitle { color: var(--text-muted); margin-bottom: 2rem; }
+        
+        .api-status {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .status-card {
+            background: var(--bg-card);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px;
+            padding: 1.25rem;
+        }
+        
+        .status-card h3 {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        
+        .dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: var(--error);
+        }
+        .dot.success { background: var(--success); }
+        
+        .test-section {
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.06);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .test-section h2 {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            background: var(--bg-dark);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 1rem;
+            color: var(--text);
+            font-family: var(--font-display);
+            font-size: 0.9rem;
+            resize: vertical;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            color: white;
+            font-family: var(--font-display);
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 1rem;
+            transition: all 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px var(--accent-glow);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .result {
+            margin-top: 1rem;
+            background: var(--bg-dark);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .result img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--accent);
+        }
+        
+        .spinner {
+            width: 16px; height: 16px;
+            border: 2px solid var(--accent);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>VJ-Gen API 集成测试</h1>
+        <p class="subtitle">MiniMax API 连接验证 & 图像生成测试</p>
+        
+        <div class="api-status">
+            <div class="status-card">
+                <h3>MiniMax LLM</h3>
+                <div class="status-indicator">
+                    <span class="dot success"></span>
+                    <span>MiniMax-M2.7</span>
+                </div>
+            </div>
+            <div class="status-card">
+                <h3>MiniMax Image</h3>
+                <div class="status-indicator">
+                    <span class="dot success"></span>
+                    <span>image-01</span>
+                </div>
+            </div>
+            <div class="status-card">
+                <h3>Kling Video</h3>
+                <div class="status-indicator">
+                    <span class="dot"></span>
+                    <span>待配置</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>🎨 图像生成测试 (image-01)</h2>
+            <textarea id="prompt-input" placeholder="输入图像描述...">cyberpunk neon city at night, rain, futuristic, cinematic lighting</textarea>
+            <button class="btn" id="img-btn" onclick="testImageGen()">🎨 生成图像</button>
+            <div id="img-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>📝 LLM 歌词分析测试 (MiniMax-M2.7)</h2>
+            <textarea id="lyrics-input" placeholder="输入歌词...">霓虹灯光闪烁的城市
+在黑暗中寻找方向
+心跳与节拍同步
+光芒穿透夜幕</textarea>
+            <button class="btn" id="llm-btn" onclick="testLLM()">🔍 分析歌词</button>
+            <div id="llm-result"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_KEY = 'sk-cp-bqEsIL4r2w54QSqR-lplUejPYY92JgVW8NDVcIndgeMZC7akuN6fDlRXizQ7NaGt6vMT12WViZej1JJQdnOIzZFsAHI-nfycW9EaFdSoFa3cLnGmy_xXqxU';
+        
+        async function testImageGen() {
+            const btn = document.getElementById('img-btn');
+            const result = document.getElementById('img-result');
+            const prompt = document.getElementById('prompt-input').value;
+            
+            btn.disabled = true;
+            result.innerHTML = '<div class="loading"><div class="spinner"></div>生成中...</div>';
+            
+            try {
+                const res = await fetch('https://api.minimax.chat/v1/image_generation', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + API_KEY,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: 'image-01',
+                        prompt: prompt,
+                        resolution: '1024x1024',
+                        response_format: 'url'
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.data && data.data.image_urls && data.data.image_urls[0]) {
+                    result.innerHTML = '<p>✅ 生成成功!</p><img src="' + data.data.image_urls[0] + '" alt="Generated">';
+                } else {
+                    result.innerHTML = '<p>❌ 生成失败: ' + JSON.stringify(data) + '</p>';
+                }
+            } catch (e) {
+                result.innerHTML = '<p>❌ 错误: ' + e.message + '</p>';
+            }
+            
+            btn.disabled = false;
+        }
+        
+        async function testLLM() {
+            const btn = document.getElementById('llm-btn');
+            const result = document.getElementById('llm-result');
+            const lyrics = document.getElementById('lyrics-input').value;
+            
+            btn.disabled = true;
+            result.innerHTML = '<div class="loading"><div class="spinner"></div>分析中...</div>';
+            
+            try {
+                const res = await fetch('https://api.minimax.chat/v1/text/chatcompletion_v2', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + API_KEY,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: 'MiniMax-M2.7',
+                        messages: [{
+                            role: 'user',
+                            content: '分析以下歌词，提取情绪、意象和视觉风格描述：\n' + lyrics
+                        }],
+                        max_tokens: 500
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.choices && data.choices[0]) {
+                    result.innerHTML = '<pre style="white-space:pre-wrap;">' + data.choices[0].message.content + '</pre>';
+                } else {
+                    result.innerHTML = '<p>❌ 分析失败: ' + JSON.stringify(data) + '</p>';
+                }
+            } catch (e) {
+                result.innerHTML = '<p>❌ 错误: ' + e.message + '</p>';
+            }
+            
+            btn.disabled = false;
+        }
+    </script>
+</body>
+</html>

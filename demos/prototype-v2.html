@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VJ-Gen 多模型VJ生成系统</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #050508;
+            --bg-dark: #0a0a0f;
+            --bg-card: #111118;
+            --bg-card-hover: #16161f;
+            --accent: #6366f1;
+            --accent-glow: rgba(99,102,241,0.4);
+            --accent-light: #a5b4fc;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --text: #e2e8f0;
+            --text-muted: #64748b;
+            --border: rgba(255,255,255,0.06);
+            --font-display: 'Sora', sans-serif;
+            --font-mono: 'Space Mono', monospace;
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: var(--font-display);
+            background: var(--bg-deep);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        /* Noise texture overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            opacity: 0.03;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        /* Header */
+        header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 64px;
+            background: rgba(5,5,8,0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 2rem;
+            z-index: 100;
+        }
+        
+        .logo {
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 1.1rem;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .logo span {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%);
+            -webkit-background-clip: text;
+        }
+        
+        .header-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.8rem;
+            background: var(--bg-card);
+            border-radius: 20px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        .live-pulse {
+            width: 6px; height: 6px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+        
+        /* Main Layout */
+        .main {
+            display: grid;
+            grid-template-columns: 320px 1fr 280px;
+            min-height: calc(100vh - 64px);
+            margin-top: 64px;
+        }
+        
+        /* Left Panel - Input */
+        .panel-left {
+            background: var(--bg-dark);
+            border-right: 1px solid var(--border);
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+        
+        .section-title {
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+        
+        /* Upload Zones */
+        .upload-zone {
+            position: relative;
+            border: 1px dashed var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 0.75rem;
+            overflow: hidden;
+        }
+        
+        .upload-zone::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .upload-zone:hover {
+            border-color: var(--accent);
+            background: rgba(99,102,241,0.05);
+        }
+        
+        .upload-zone:hover::before {
+            opacity: 1;
+        }
+        
+        .upload-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            filter: grayscale(0.5);
+            transition: filter 0.3s;
+        }
+        
+        .upload-zone:hover .upload-icon {
+            filter: grayscale(0);
+        }
+        
+        .upload-text {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        
+        .upload-hint {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            opacity: 0.6;
+            margin-top: 0.3rem;
+        }
+        
+        input[type="file"] { display: none; }
+        
+        /* Config Section */
+        .config-section {
+            margin-top: 1.5rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.4rem;
+            display: block;
+        }
+        
+        select, input, textarea {
+            width: 100%;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.7rem 0.9rem;
+            color: var(--text);
+            font-family: var(--font-display);
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        
+        select:focus, input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+        
+        textarea {
+            min-height: 70px;
+            resize: vertical;
+            font-size: 0.8rem;
+        }
+        
+        /* Generate Button */
+        .btn-generate {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+        
+        .btn-generate::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn-generate:hover::before {
+            left: 100%;
+        }
+        
+        .btn-generate:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(99,102,241,0.4);
+        }
+        
+        .btn-generate:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        /* Center Panel - Pipeline */
+        .panel-center {
+            padding: 1.5rem;
+            overflow-y: auto;
+            background: var(--bg-deep);
+        }
+        
+        /* Pipeline Stage */
+        .stage {
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            margin-bottom: 1rem;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+        
+        .stage:hover {
+            border-color: rgba(99,102,241,0.2);
+        }
+        
+        .stage-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.25rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .stage-header:hover {
+            background: var(--bg-card-hover);
+        }
+        
+        .stage-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .stage-icon {
+            width: 44px; height: 44px;
+            background: var(--bg-dark);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+        }
+        
+        .stage-text h3 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 0.2rem;
+        }
+        
+        .stage-text p {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+        
+        .stage-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+        
+        .status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+        
+        .status-dot.pending { background: var(--text-muted); }
+        .status-dot.running { background: var(--accent); animation: pulse 1s infinite; }
+        .status-dot.done { background: var(--success); }
+        
+        .stage-body {
+            padding: 0 1.25rem 1.25rem;
+            display: none;
+        }
+        
+        .stage-body.open { display: block; }
+        
+        /* Progress Bar */
+        .progress-track {
+            height: 4px;
+            background: var(--bg-dark);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--accent-light));
+            border-radius: 2px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        
+        .progress-fill.done {
+            background: var(--success);
+        }
+        
+        /* Code Block */
+        .code-block {
+            background: var(--bg-dark);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            line-height: 1.6;
+            overflow-x: auto;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+        
+        .json-key { color: #f472b6; }
+        .json-string { color: #67e8f9; }
+        .json-number { color: #fbbf24; }
+        
+        /* Right Panel - Preview */
+        .panel-right {
+            background: var(--bg-dark);
+            border-left: 1px solid var(--border);
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+        
+        /* Preview Screen */
+        .preview-screen {
+            aspect-ratio: 16/9;
+            background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-deep) 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 1rem;
+        }
+        
+        .preview-placeholder {
+            text-align: center;
+            color: var(--text-muted);
+        }
+        
+        .preview-placeholder-icon {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            opacity: 0.5;
+        }
+        
+        .preview-placeholder-text {
+            font-size: 0.8rem;
+        }
+        
+        /* Aspect Buttons */
+        .aspect-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .aspect-btn {
+            padding: 0.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.7rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-muted);
+        }
+        
+        .aspect-btn:hover {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+        
+        .aspect-btn.active {
+            border-color: var(--accent);
+            background: rgba(99,102,241,0.1);
+            color: var(--accent-light);
+        }
+        
+        /* Shot List */
+        .shot-list {
+            max-height: 250px;
+            overflow-y: auto;
+        }
+        
+        .shot-item {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        
+        .shot-item:hover {
+            background: var(--bg-card-hover);
+        }
+        
+        .shot-item.active {
+            border-color: var(--accent);
+            background: rgba(99,102,241,0.1);
+        }
+        
+        .shot-time {
+            font-size: 0.65rem;
+            color: var(--accent-light);
+            font-family: var(--font-mono);
+        }
+        
+        .shot-lyric {
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin: 0.3rem 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .shot-meta {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+        }
+        
+        /* Log */
+        .log-container {
+            background: var(--bg-dark);
+            border-radius: 8px;
+            padding: 0.75rem;
+            font-family: var(--font-mono);
+            font-size: 0.65rem;
+            max-height: 120px;
+            overflow-y: auto;
+            margin-top: 1rem;
+        }
+        
+        .log-entry {
+            margin-bottom: 0.3rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .log-time {
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+        
+        .log-msg { color: var(--text); }
+        .log-msg.success { color: var(--success); }
+        .log-msg.error { color: var(--error); }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--bg-card-hover); border-radius: 3px; }
+        
+        /* Responsive */
+        @media (max-width: 1100px) {
+            .main { grid-template-columns: 1fr; }
+            .panel-left, .panel-right { border: none; border-bottom: 1px solid var(--border); }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">VJ<span>-</span>Gen</div>
+        <div class="header-badge">
+            <span class="live-pulse"></span>
+            <span>多模型VJ生成系统</span>
+        </div>
+    </header>
+    
+    <main class="main">
+        <!-- Left Panel -->
+        <aside class="panel-left">
+            <div class="section-title">上传素材</div>
+            
+            <div class="upload-zone" onclick="document.getElementById('audio-input').click()">
+                <div class="upload-icon">🎵</div>
+                <div class="upload-text">上传音频文件</div>
+                <div class="upload-hint">MP3, WAV, FLAC, M4A</div>
+            </div>
+            <input type="file" id="audio-input" accept="audio/*">
+            
+            <div class="upload-zone" onclick="document.getElementById('lyrics-input').click()">
+                <div class="upload-icon">📝</div>
+                <div class="upload-text">上传歌词文件</div>
+                <div class="upload-hint">TXT, LRC, JSON</div>
+            </div>
+            <input type="file" id="lyrics-input" accept=".txt,.lrc,.json">
+            
+            <div class="config-section">
+                <div class="section-title">模型配置</div>
+                
+                <div class="form-group">
+                    <label class="form-label">LLM 模型</label>
+                    <select id="llm-model">
+                        <option value="minimax">MiniMax (国产)</option>
+                        <option value="kimi">Kimi (国产)</option>
+                        <option value="deepseek">DeepSeek (国产)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">图像生成</label>
+                    <select id="image-model">
+                        <option value="midjourney">Midjourney</option>
+                        <option value="nanobanana">NanoBanana</option>
+                        <option value="seedance">Seedance 2.0</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">视频生成</label>
+                    <select id="video-model">
+                        <option value="kling">Kling (快手)</option>
+                        <option value="seedance">Seedance 2.0</option>
+                        <option value="runway">Runway</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">视觉风格</label>
+                    <textarea id="style-pref" placeholder="赛博朋克 / 水墨 / 国风..."></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">歌词内容（可选）</label>
+                    <textarea id="lyrics-text" placeholder="粘贴歌词..."></textarea>
+                </div>
+            </div>
+            
+            <button class="btn-generate" id="generate-btn" onclick="startGeneration()">
+                🚀 开始生成
+            </button>
+        </aside>
+        
+        <!-- Center Panel -->
+        <section class="panel-center">
+            <div class="section-title" style="margin-bottom:1rem;">生成管线</div>
+            
+            <!-- Stage 1 -->
+            <div class="stage">
+                <div class="stage-header" onclick="toggleStage(1)">
+                    <div class="stage-info">
+                        <div class="stage-icon">🎵</div>
+                        <div class="stage-text">
+                            <h3>音频分析</h3>
+                            <p>BPM · 节拍 · 段落 · 能量</p>
+                        </div>
+                    </div>
+                    <div class="stage-status">
+                        <span class="status-dot" id="dot1"></span>
+                        <span id="text1">待处理</span>
+                    </div>
+                </div>
+                <div class="stage-body" id="body1">
+                    <div class="progress-track">
+                        <div class="progress-fill" id="prog1"></div>
+                    </div>
+                    <div class="code-block" id="code1">{ "bpm": null, "sections": [] }</div>
+                </div>
+            </div>
+            
+            <!-- Stage 2 -->
+            <div class="stage">
+                <div class="stage-header" onclick="toggleStage(2)">
+                    <div class="stage-info">
+                        <div class="stage-icon">📝</div>
+                        <div class="stage-text">
+                            <h3>歌词NLP</h3>
+                            <p>情绪 · 意象 · Prompt</p>
+                        </div>
+                    </div>
+                    <div class="stage-status">
+                        <span class="status-dot" id="dot2"></span>
+                        <span id="text2">待处理</span>
+                    </div>
+                </div>
+                <div class="stage-body" id="body2">
+                    <div class="progress-track">
+                        <div class="progress-fill" id="prog2"></div>
+                    </div>
+                    <div class="code-block" id="code2">{ "lines": [], "emotions": {} }</div>
+                </div>
+            </div>
+            
+            <!-- Stage 3 -->
+            <div class="stage">
+                <div class="stage-header" onclick="toggleStage(3)">
+                    <div class="stage-info">
+                        <div class="stage-icon">🎬</div>
+                        <div class="stage-text">
+                            <h3>VJ脚本</h3>
+                            <p>时间片 · 视觉描述 · 运动</p>
+                        </div>
+                    </div>
+                    <div class="stage-status">
+                        <span class="status-dot" id="dot3"></span>
+                        <span id="text3">待处理</span>
+                    </div>
+                </div>
+                <div class="stage-body" id="body3">
+                    <div class="progress-track">
+                        <div class="progress-fill" id="prog3"></div>
+                    </div>
+                    <div class="code-block" id="code3">{ "shots": [] }</div>
+                </div>
+            </div>
+            
+            <!-- Stage 4 -->
+            <div class="stage">
+                <div class="stage-header" onclick="toggleStage(4)">
+                    <div class="stage-info">
+                        <div class="stage-icon">🖼️</div>
+                        <div class="stage-text">
+                            <h3>关键帧</h3>
+                            <p>图像生成</p>
+                        </div>
+                    </div>
+                    <div class="stage-status">
+                        <span class="status-dot" id="dot4"></span>
+                        <span id="text4">待处理</span>
+                    </div>
+                </div>
+                <div class="stage-body" id="body4">
+                    <div class="progress-track">
+                        <div class="progress-fill" id="prog4"></div>
+                    </div>
+                    <div class="code-block" id="code4">{ "keyframes": [] }</div>
+                </div>
+            </div>
+            
+            <!-- Stage 5 -->
+            <div class="stage">
+                <div class="stage-header" onclick="toggleStage(5)">
+                    <div class="stage-info">
+                        <div class="stage-icon">🎥</div>
+                        <div class="stage-text">
+                            <h3>视频片段</h3>
+                            <p>Kling · Seedance</p>
+                        </div>
+                    </div>
+                    <div class="stage-status">
+                        <span class="status-dot" id="dot5"></span>
+                        <span id="text5">待处理</span>
+                    </div>
+                </div>
+                <div class="stage-body" id="body5">
+                    <div class="progress-track">
+                        <div class="progress-fill" id="prog5"></div>
+                    </div>
+                    <div class="code-block" id="code5">{ "clips": [] }</div>
+                </div>
+            </div>
+            
+            <!-- Stage 6 -->
+            <div class="stage">
+                <div class="stage-header" onclick="toggleStage(6)">
+                    <div class="stage-info">
+                        <div class="stage-icon">🎞️</div>
+                        <div class="stage-text">
+                            <h3>时间线</h3>
+                            <p>拼接 · 转场 · 输出</p>
+                        </div>
+                    </div>
+                    <div class="stage-status">
+                        <span class="status-dot" id="dot6"></span>
+                        <span id="text6">待处理</span>
+                    </div>
+                </div>
+                <div class="stage-body" id="body6">
+                    <div class="progress-track">
+                        <div class="progress-fill" id="prog6"></div>
+                    </div>
+                    <div class="code-block" id="code6">{ "output": null }</div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Right Panel -->
+        <aside class="panel-right">
+            <div class="section-title">实时预览</div>
+            
+            <div class="preview-screen" id="preview">
+                <div class="preview-placeholder">
+                    <div class="preview-placeholder-icon">🎬</div>
+                    <div class="preview-placeholder-text">生成完成后预览</div>
+                </div>
+            </div>
+            
+            <div class="section-title">画幅</div>
+            <div class="aspect-grid">
+                <div class="aspect-btn active" onclick="selectAspect(this, '16:9')">16:9</div>
+                <div class="aspect-btn" onclick="selectAspect(this, '9:16')">9:16</div>
+                <div class="aspect-btn" onclick="selectAspect(this, '1:1')">1:1</div>
+            </div>
+            
+            <div class="section-title">镜头列表</div>
+            <div class="shot-list" id="shot-list">
+                <div style="text-align:center;padding:2rem;color:var(--text-muted);font-size:0.8rem;">
+                    等待生成...
+                </div>
+            </div>
+            
+            <div class="log-container" id="log">
+                <div class="log-entry">
+                    <span class="log-time">--:--</span>
+                    <span class="log-msg">等待开始...</span>
+                </div>
+            </div>
+        </aside>
+    </main>
+    
+    <script>
+        // Toggle stage
+        function toggleStage(n) {
+            document.getElementById('body' + n).classList.toggle('open');
+        }
+        
+        // Select aspect ratio
+        function selectAspect(el, ratio) {
+            document.querySelectorAll('.aspect-btn').forEach(b => b.classList.remove('active'));
+            el.classList.add('active');
+        }
+        
+        // Format JSON with syntax highlighting
+        function formatJSON(obj) {
+            return JSON.stringify(obj, null, 2)
+                .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
+                .replace(/: "([^"]+)"/g, ': <span class="json-string">"$1"</span>')
+                .replace(/: (\d+\.?\d*)/g, ': <span class="json-number">$1</span>');
+        }
+        
+        // Add log entry
+        function addLog(msg, type = '') {
+            const log = document.getElementById('log');
+            const time = new Date().toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'});
+            const cls = type === 'success' ? 'success' : type === 'error' ? 'error' : '';
+            log.innerHTML = `<div class="log-entry"><span class="log-time">${time}</span><span class="log-msg ${cls}">${msg}</span></div>` + log.innerHTML;
+        }
+        
+        // Simulate progress
+        async function runStage(n, name, data, callback) {
+            const dot = document.getElementById('dot' + n);
+            const txt = document.getElementById('text' + n);
+            const prog = document.getElementById('prog' + n);
+            const code = document.getElementById('code' + n);
+            
+            dot.className = 'status-dot running';
+            txt.textContent = '处理中';
+            addLog('▶ ' + name);
+            
+            for (let i = 0; i <= 100; i += 10) {
+                prog.style.width = i + '%';
+                await new Promise(r => setTimeout(r, 100));
+            }
+            
+            dot.className = 'status-dot done';
+            txt.textContent = '完成';
+            prog.classList.add('done');
+            code.innerHTML = formatJSON(data);
+            
+            addLog('✓ ' + name, 'success');
+            
+            if (callback) callback();
+        }
+        
+        // Start generation
+        async function startGeneration() {
+            const btn = document.getElementById('generate-btn');
+            btn.disabled = true;
+            btn.textContent = '⏳ 生成中...';
+            
+            addLog('🚀 开始生成', 'success');
+            
+            // Stage 1: Audio
+            await runStage(1, '音频分析', {
+                bpm: 128,
+                duration: 180.5,
+                sections: [
+                    { type: 'intro', start: 0, end: 15, energy: 0.3 },
+                    { type: 'verse', start: 15, end: 45, energy: 0.5 },
+                    { type: 'chorus', start: 45, end: 75, energy: 0.9 },
+                    { type: 'drop', start: 75, end: 90, energy: 1.0 }
+                ]
+            });
+            
+            // Stage 2: Lyrics
+            await runStage(2, '歌词分析', {
+                lines: [
+                    { time: 15, text: '霓虹灯光闪烁', sentiment: 'build' },
+                    { time: 25, text: '在黑暗中寻找', sentiment: 'dark' },
+                    { time: 45, text: '心跳与节拍同步', sentiment: 'climax' }
+                ]
+            });
+            
+            // Stage 3: Script
+            await runStage(3, '脚本生成', {
+                shots: [
+                    { id: 1, start: 15, end: 30, style: 'cyberpunk' },
+                    { id: 2, start: 30, end: 45, style: 'neon' },
+                    { id: 3, start: 45, end: 60, style: 'particle' }
+                ]
+            });
+            
+            // Update shot list
+            const list = document.getElementById('shot-list');
+            list.innerHTML = `
+                <div class="shot-item"><div class="shot-time">15s - 30s</div><div class="shot-lyric">霓虹灯光闪烁</div><div class="shot-meta">cyberpunk</div></div>
+                <div class="shot-item"><div class="shot-time">30s - 45s</div><div class="shot-lyric">在黑暗中寻找</div><div class="shot-meta">neon</div></div>
+                <div class="shot-item"><div class="shot-time">45s - 60s</div><div class="shot-lyric">心跳与节拍同步</div><div class="shot-meta">particle</div></div>
+            `;
+            
+            // Stage 4: Keyframes
+            await runStage(4, '关键帧生成', {
+                keyframes: ['kf1.png', 'kf2.png', 'kf3.png'],
+                model: 'midjourney'
+            });
+            
+            // Stage 5: Video
+            await runStage(5, '视频生成', {
+                clips: ['clip1.mp4', 'clip2.mp4', 'clip3.mp4'],
+                model: 'kling'
+            });
+            
+            // Stage 6: Timeline
+            await runStage(6, '时间线输出', {
+                output: 'vj_final.mp4',
+                resolution: '1920x1080',
+                fps: 30
+            }, () => {
+                btn.disabled = false;
+                btn.textContent = '✅ 生成完成';
+                addLog('🎉 VJ素材生成完成!', 'success');
+            });
+        }
+        
+        // Init - open first stage
+        toggleStage(1);
+    </script>
+</body>
+</html>

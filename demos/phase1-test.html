@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VJ-Gen Phase 1 测试界面</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-dark: #0a0a0f;
+            --bg-card: #12121a;
+            --bg-card-hover: #1a1a25;
+            --accent: #6366f1;
+            --accent-light: #818cf8;
+            --success: #10b981;
+            --error: #ef4444;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border: rgba(255,255,255,0.08);
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 1.5rem;
+        }
+        
+        .container { max-width: 1200px; margin: 0 auto; }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        h1 {
+            font-size: 1.3rem;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .back-link {
+            color: var(--accent-light);
+            text-decoration: none;
+            font-size: 0.85rem;
+        }
+        
+        .back-link:hover { text-decoration: underline; }
+        
+        .modules-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .module-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        
+        .module-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .module-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        
+        .module-status {
+            padding: 0.2rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            background: rgba(16,185,129,0.2);
+            color: var(--success);
+        }
+        
+        .module-body { padding: 1.25rem; }
+        
+        .module-desc {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+            line-height: 1.5;
+        }
+        
+        .test-area {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .test-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+        
+        textarea, input, select {
+            width: 100%;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.75rem;
+            color: var(--text);
+            font-size: 0.85rem;
+            font-family: inherit;
+            margin-bottom: 0.75rem;
+        }
+        
+        textarea { min-height: 100px; resize: vertical; }
+        
+        select { cursor: pointer; }
+        
+        .btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 0.6rem 1.25rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            width: 100%;
+        }
+        
+        .btn:hover { background: var(--accent-light); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .result-area {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            min-height: 150px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.8rem;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+        
+        .result-success { color: var(--success); }
+        .result-error { color: var(--error); }
+        .result-info { color: var(--accent-light); }
+        
+        .json-key { color: #f472b6; }
+        .json-string { color: #a5f3fc; }
+        .json-number { color: #fcd34d; }
+        .json-boolean { color: #a5f3fc; }
+        
+        .test-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .test-row input { margin-bottom: 0; flex: 1; }
+        
+        footer {
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 Phase 1 测试界面：核心数据模型 & 适配器</h1>
+            <a href="../dashboard/index.html" class="back-link">← 返回总览</a>
+        </header>
+        
+        <div class="modules-grid">
+            <!-- 模型定义测试 -->
+            <div class="module-card">
+                <div class="module-header">
+                    <span class="module-title">📦 数据模型定义</span>
+                    <span class="module-status">✅ 可用</span>
+                </div>
+                <div class="module-body">
+                    <div class="module-desc">测试核心数据模型的创建和序列化</div>
+                    
+                    <div class="test-area">
+                        <div class="test-label">选择模型类型：</div>
+                        <select id="model-type">
+                            <option value="audio">AudioAnalysisResult</option>
+                            <option value="lyric">LyricAnalysis</option>
+                            <option value="shot">ShotScriptItem</option>
+                            <option value="timeline">VJTimeline</option>
+                            <option value="project">Project</option>
+                        </select>
+                        
+                        <div class="test-label">JSON 示例数据：</div>
+                        <textarea id="model-input" placeholder="输入JSON数据...">{
+  "bpm": 120,
+  "duration": 180.5,
+  "sections": []
+}</textarea>
+                    </div>
+                    
+                    <button class="btn" onclick="testModel()">▶ 测试模型</button>
+                    
+                    <div class="test-label" style="margin-top:1rem;">输出结果：</div>
+                    <div class="result-area" id="model-output">等待测试...</div>
+                </div>
+            </div>
+            
+            <!-- 适配器测试 -->
+            <div class="module-card">
+                <div class="module-header">
+                    <span class="module-title">🔌 适配器工厂</span>
+                    <span class="module-status">✅ 可用</span>
+                </div>
+                <div class="module-body">
+                    <div class="module-desc">测试适配器的注册和获取</div>
+                    
+                    <div class="test-area">
+                        <div class="test-label">适配器类型：</div>
+                        <select id="adapter-type" onchange="updateAdapterTest()">
+                            <option value="audio">AudioAnalysisAdapter</option>
+                            <option value="llm">LLMAdapter</option>
+                            <option value="image">ImageGenAdapter</option>
+                            <option value="video">VideoGenAdapter</option>
+                        </select>
+                        
+                        <div class="test-label">模型选择：</div>
+                        <select id="adapter-model">
+                            <option value="librosa">librosa (本地)</option>
+                            <option value="openai">OpenAI (GPT-4o)</option>
+                            <option value="anthropic">Anthropic (Claude)</option>
+                        </select>
+                    </div>
+                    
+                    <button class="btn" onclick="testAdapter()">▶ 测试适配器</button>
+                    
+                    <div class="test-label" style="margin-top:1rem;">输出结果：</div>
+                    <div class="result-area" id="adapter-output">等待测试...</div>
+                </div>
+            </div>
+            
+            <!-- 路由测试 -->
+            <div class="module-card">
+                <div class="module-header">
+                    <span class="module-title">🧭 模型路由</span>
+                    <span class="module-status">✅ 可用</span>
+                </div>
+                <div class="module-body">
+                    <div class="module-desc">测试模型路由选择逻辑</div>
+                    
+                    <div class="test-area">
+                        <div class="test-label">任务类型：</div>
+                        <select id="task-type">
+                            <option value="lyric_analysis">歌词分析</option>
+                            <option value="prompt_enhance">Prompt优化</option>
+                            <option value="shot_script_generation">脚本生成</option>
+                            <option value="keyframe">关键帧生成</option>
+                            <option value="vj_clip">VJ片段生成</option>
+                        </select>
+                        
+                        <div class="test-label">策略偏好：</div>
+                        <select id="route-strategy">
+                            <option value="quality">质量优先</option>
+                            <option value="cost">成本优先</option>
+                            <option value="latency">速度优先</option>
+                            <option value="balanced">均衡</option>
+                        </select>
+                    </div>
+                    
+                    <button class="btn" onclick="testRouter()">▶ 测试路由</button>
+                    
+                    <div class="test-label" style="margin-top:1rem;">输出结果：</div>
+                    <div class="result-area" id="router-output">等待测试...</div>
+                </div>
+            </div>
+            
+            <!-- 配置测试 -->
+            <div class="module-card">
+                <div class="module-header">
+                    <span class="module-title">⚙️ 配置管理</span>
+                    <span class="module-status">✅ 可用</span>
+                </div>
+                <div class="module-body">
+                    <div class="module-desc">测试配置文件的加载和解析</div>
+                    
+                    <div class="test-area">
+                        <div class="test-label">配置文件：</div>
+                        <select id="config-file">
+                            <option value="models">config/models.yaml</option>
+                            <option value="routing">config/routing.yaml</option>
+                        </select>
+                        
+                        <div class="test-label">搜索配置项：</div>
+                        <input type="text" id="config-search" placeholder="输入关键词搜索...">
+                    </div>
+                    
+                    <button class="btn" onclick="testConfig()">▶ 加载配置</button>
+                    
+                    <div class="test-label" style="margin-top:1rem;">输出结果：</div>
+                    <div class="result-area" id="config-output">等待测试...</div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            VJ-Gen 多模型VJ生成系统 · Phase 1 测试界面 · 最后更新: 2026-04-02
+        </footer>
+    </div>
+    
+    <script>
+        // 模拟后端响应
+        function mockResponse(success, data) {
+            return { success, data, timestamp: new Date().toISOString() };
+        }
+        
+        // 格式化JSON显示
+        function formatJSON(obj) {
+            return JSON.stringify(obj, null, 2)
+                .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
+                .replace(/: "([^"]+)"/g, ': <span class="json-string">"$1"</span>')
+                .replace(/: (\d+\.?\d*)/g, ': <span class="json-number">$1</span>')
+                .replace(/: (true|false|null)/g, ': <span class="json-boolean">$1</span>');
+        }
+        
+        // 测试数据模型
+        function testModel() {
+            const type = document.getElementById('model-type').value;
+            const input = document.getElementById('model-input').value;
+            const output = document.getElementById('model-output');
+            
+            output.innerHTML = '<span class="result-info">⏳ 测试中...</span>';
+            
+            setTimeout(() => {
+                try {
+                    const data = input ? JSON.parse(input) : {};
+                    let result = {};
+                    
+                    switch(type) {
+                        case 'audio':
+                            result = {
+                                _type: 'AudioAnalysisResult',
+                                bpm: data.bpm || 120,
+                                duration: data.duration || 180.5,
+                                sections: data.sections || [],
+                                energy_curve: [],
+                                time_signature: '4/4'
+                            };
+                            break;
+                        case 'lyric':
+                            result = {
+                                _type: 'LyricAnalysis',
+                                lines: data.lines || [{text: '测试歌词', sentiment: 'calm', imagery: []}],
+                                language: 'zh'
+                            };
+                            break;
+                        case 'shot':
+                            result = {
+                                _type: 'ShotScriptItem',
+                                time_start: 0.0,
+                                time_end: 10.0,
+                                lyric: '测试歌词',
+                                audio_emotion: 'calm',
+                                energy: 0.5,
+                                visual_prompt: 'test prompt'
+                            };
+                            break;
+                        case 'timeline':
+                            result = {
+                                _type: 'VJTimeline',
+                                clips: [],
+                                audio_path: null,
+                                total_duration: 0,
+                                resolution: [1920, 1080],
+                                fps: 30
+                            };
+                            break;
+                        case 'project':
+                            result = {
+                                _type: 'Project',
+                                id: 'proj_' + Date.now(),
+                                name: '测试项目',
+                                status: 'created',
+                                created_at: new Date().toISOString()
+                            };
+                            break;
+                    }
+                    
+                    output.innerHTML = `<span class="result-success">✅ 模型创建成功</span>\n\n${formatJSON(result)}`;
+                } catch(e) {
+                    output.innerHTML = `<span class="result-error">❌ 错误: ${e.message}</span>`;
+                }
+            }, 300);
+        }
+        
+        // 测试适配器
+        function updateAdapterTest() {
+            const type = document.getElementById('adapter-type').value;
+            const model = document.getElementById('adapter-model');
+            
+            const options = {
+                audio: [
+                    { value: 'librosa', text: 'librosa (本地)' },
+                    { value: 'demucs', text: 'demucs (人声分离)' },
+                    { value: 'essentia', text: 'essentia (备用)' }
+                ],
+                llm: [
+                    { value: 'minimax', text: 'MiniMax (国产)' },
+                    { value: 'kimi', text: 'Kimi (国产)' },
+                    { value: 'deepseek', text: 'DeepSeek (国产)' }
+                ],
+                image: [
+                    { value: 'midjourney', text: 'Midjourney' },
+                    { value: 'nanobanana', text: 'NanoBanana (Gemini)' },
+                    { value: 'seedance', text: 'Seedance 2.0' }
+                ],
+                video: [
+                    { value: 'kling', text: 'Kling (快手)' },
+                    { value: 'seedance', text: 'Seedance 2.0' },
+                    { value: 'runway', text: 'Runway Gen-3' }
+                ]
+            };
+            
+            model.innerHTML = options[type].map(o => 
+                `<option value="${o.value}">${o.text}</option>`
+            ).join('');
+        }
+        
+        function testAdapter() {
+            const type = document.getElementById('adapter-type').value;
+            const model = document.getElementById('adapter-model').value;
+            const output = document.getElementById('adapter-output');
+            
+            output.innerHTML = '<span class="result-info">⏳ 初始化适配器...</span>';
+            
+            setTimeout(() => {
+                const adapters = {
+                    audio: {
+                        librosa: { provider: 'local', model: 'librosa', status: 'ready', capabilities: ['BPM检测', '节拍提取', '段落分割', '能量分析'] },
+                        demucs: { provider: 'local', model: 'demucs', status: 'ready', capabilities: ['人声分离', '伴奏分离'] },
+                        essentia: { provider: 'local', model: 'essentia', status: 'ready', capabilities: ['音频分析', '节拍检测'] }
+                    },
+                    llm: {
+                        minimax: { provider: 'minimax', model: 'abab6.5s-chat', status: 'ready', capabilities: ['歌词分析', 'Prompt优化'] },
+                        kimi: { provider: 'kimi', model: 'moonshot-v1-128k', status: 'ready', capabilities: ['结构化输出', '长文本处理'] },
+                        deepseek: { provider: 'deepseek', model: 'deepseek-chat', status: 'ready', capabilities: ['创意分析', '风格建议'] }
+                    },
+                    image: {
+                        midjourney: { provider: 'midjourney', model: 'v6', status: 'ready', capabilities: ['艺术风格', '高质量'] },
+                        nanobanana: { provider: 'nanobanana', model: 'gemini-3-pro-image', status: 'ready', capabilities: ['快速生成', '概念草图'] },
+                        seedance: { provider: 'seedance', model: 'seedance-2.0', status: 'ready', capabilities: ['国风', '中文场景'] }
+                    },
+                    video: {
+                        kling: { provider: 'kling', model: 'kling-1.0', status: 'ready', capabilities: ['动作连贯', '电影感'] },
+                        seedance: { provider: 'seedance', model: 'seedance-2.0-video', status: 'ready', capabilities: ['中文场景', '快速生成'] },
+                        runway: { provider: 'runway', model: 'gen-3-alpha', status: 'ready', capabilities: ['电影感', '特效'] }
+                    }
+                };
+                
+                const result = adapters[type]?.[model] || { status: 'not_found' };
+                output.innerHTML = `<span class="result-success">✅ 适配器就绪</span>\n\n${formatJSON(result)}`;
+            }, 300);
+        }
+        
+        // 测试路由
+        function testRouter() {
+            const task = document.getElementById('task-type').value;
+            const strategy = document.getElementById('route-strategy').value;
+            const output = document.getElementById('router-output');
+            
+            output.innerHTML = '<span class="result-info">⏳ 计算最优路由...</span>';
+            
+            setTimeout(() => {
+                const routes = {
+                    lyric_analysis: { 
+                        primary: { provider: 'minimax', model: 'abab6.5s-chat', score: 92 },
+                        fallback: [{ provider: 'kimi', model: 'moonshot-v1-128k', score: 88 }]
+                    },
+                    prompt_enhance: {
+                        primary: { provider: 'kimi', model: 'moonshot-v1-128k', score: 90 },
+                        fallback: [{ provider: 'minimax', model: 'abab6.5s-chat', score: 87 }]
+                    },
+                    shot_script_generation: {
+                        primary: { provider: 'kimi', model: 'moonshot-v1-128k', score: 91 },
+                        fallback: [{ provider: 'deepseek', model: 'deepseek-chat', score: 85 }]
+                    },
+                    keyframe: {
+                        primary: { provider: 'midjourney', model: 'v6', score: 95 },
+                        fallback: [
+                            { provider: 'nanobanana', model: 'gemini-3-pro-image', score: 82 },
+                            { provider: 'seedance', model: 'seedance-2.0', score: 80 }
+                        ]
+                    },
+                    vj_clip: {
+                        primary: { provider: 'kling', model: 'kling-1.0', score: 93 },
+                        fallback: [
+                            { provider: 'seedance', model: 'seedance-2.0-video', score: 85 },
+                            { provider: 'runway', model: 'gen-3-alpha', score: 80 }
+                        ]
+                    }
+                };
+                
+                const result = routes[task] || {};
+                result.strategy = strategy;
+                result.reason = strategy === 'quality' ? '优先选择最高质量模型' :
+                               strategy === 'cost' ? '优先选择成本最低模型' :
+                               strategy === 'latency' ? '优先选择响应最快模型' : '综合考虑质量和成本';
+                
+                output.innerHTML = `<span class="result-success">✅ 路由计算完成</span>\n\n${formatJSON(result)}`;
+            }, 300);
+        }
+        
+        // 测试配置
+        function testConfig() {
+            const file = document.getElementById('config-file').value;
+            const search = document.getElementById('config-search').value;
+            const output = document.getElementById('config-output');
+            
+            output.innerHTML = '<span class="result-info">⏳ 加载配置...</span>';
+            
+            setTimeout(() => {
+                const configs = {
+                    models: {
+                        _file: 'config/models.yaml',
+                        audio_analysis: { librosa: { type: 'local', capabilities: ['BPM', '节拍', '段落'] } },
+                        llm: { 
+                            minimax: { type: 'api', endpoint: 'wss://api.minimax.chat' },
+                            kimi: { type: 'api', endpoint: 'https://api.moonshot.cn' }
+                        },
+                        image_gen: {
+                            midjourney: { type: 'api', via: 'lexica' },
+                            nanobanana: { type: 'api', model: 'gemini-3-pro-image' }
+                        },
+                        video_gen: {
+                            kling: { type: 'api', endpoint: 'https://api.kling.ai' },
+                            seedance: { type: 'api', endpoint: 'https://ark.cn-beijing.volces.com' }
+                        }
+                    },
+                    routing: {
+                        _file: 'config/routing.yaml',
+                        llm_priority: ['minimax', 'kimi', 'deepseek'],
+                        image_priority: ['midjourney', 'nanobanana', 'seedance'],
+                        video_priority: ['kling', 'seedance', 'runway']
+                    }
+                };
+                
+                const result = configs[file] || {};
+                if (search) {
+                    // 模拟搜索
+                    result.search = search;
+                    result.matches = Object.entries(result).filter(([k,v]) => 
+                        k.includes(search) || JSON.stringify(v).includes(search)
+                    ).map(([k,v]) => ({ key: k, value: v }));
+                }
+                
+                output.innerHTML = `<span class="result-success">✅ 配置加载成功</span>\n\n${formatJSON(result)}`;
+            }, 300);
+        }
+        
+        // 初始化
+        updateAdapterTest();
+    </script>
+</body>
+</html>

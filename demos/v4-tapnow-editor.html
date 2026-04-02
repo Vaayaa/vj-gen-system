@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VJ-Gen V4 - NLE编辑器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        bg: {
+                            primary: '#0D0D0F',
+                            panel: '#141418',
+                            card: '#1C1C22',
+                        },
+                        border: '#2A2A32',
+                        accent: {
+                            DEFAULT: '#6366F1',
+                            hover: '#818CF8',
+                            success: '#10B981',
+                            warning: '#F59E0B',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #3A3A44; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4A4A54; }
+        
+        /* Panel resize handle */
+        .resize-handle {
+            width: 4px;
+            cursor: col-resize;
+            background: transparent;
+            transition: background 0.2s;
+        }
+        .resize-handle:hover { background: #6366F1; }
+        
+        /* Timeline track */
+        .timeline-track {
+            background: repeating-linear-gradient(
+                90deg,
+                transparent,
+                transparent 49px,
+                #2A2A32 49px,
+                #2A2A32 50px
+            );
+        }
+        
+        /* Node flow */
+        .node {
+            background: #1C1C22;
+            border: 1px solid #2A2A32;
+            border-radius: 8px;
+            min-width: 120px;
+        }
+        .node:hover { border-color: #6366F1; }
+        .node.selected { border-color: #6366F1; box-shadow: 0 0 0 2px rgba(99,102,241,0.3); }
+        
+        /* Tab active */
+        .tab-btn.active {
+            background: #6366F1;
+            color: white;
+        }
+        
+        /* Clip block */
+        .clip-block {
+            background: linear-gradient(135deg, #6366F1, #8B5CF6);
+            border-radius: 4px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .clip-block:hover { transform: scale(1.02); box-shadow: 0 4px 12px rgba(99,102,241,0.4); }
+        
+        /* Waveform */
+        .waveform {
+            background: linear-gradient(to bottom, #6366F1 0%, #6366F1 50%, transparent 50%);
+            background-size: 100% 4px;
+            opacity: 0.7;
+        }
+        
+        /* Playhead */
+        .playhead {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #10B981;
+            z-index: 10;
+            cursor: ew-resize;
+        }
+        .playhead::before {
+            content: '▼';
+            position: absolute;
+            top: -8px;
+            left: -6px;
+            color: #10B981;
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body class="bg-bg-primary text-white h-screen flex flex-col overflow-hidden">
+    
+    <!-- Top Toolbar -->
+    <header class="h-12 bg-bg-panel border-b border-border flex items-center justify-between px-4 flex-shrink-0">
+        <div class="flex items-center gap-4">
+            <div class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center font-bold text-sm">
+                V
+            </div>
+            <span class="font-medium">VJ-Gen</span>
+            <span class="text-border">|</span>
+            <input type="text" value="赛博都市概念_v2" 
+                   class="bg-transparent text-sm outline-none border-b border-transparent hover:border-border focus:border-accent">
+        </div>
+        
+        <div class="flex items-center gap-2">
+            <button class="w-8 h-8 rounded-lg hover:bg-bg-card flex items-center justify-center" title="撤销">↩️</button>
+            <button class="w-8 h-8 rounded-lg hover:bg-bg-card flex items-center justify-center" title="重做">↪️</button>
+            <span class="text-border mx-2">|</span>
+            <button class="w-8 h-8 rounded-lg hover:bg-bg-card flex items-center justify-center" title="缩放">🔍</button>
+            <select class="bg-bg-card border border-border rounded-lg px-2 py-1 text-sm">
+                <option>100%</option>
+                <option>75%</option>
+                <option>50%</option>
+            </select>
+            <span class="text-border mx-2">|</span>
+            <button class="px-4 py-1.5 bg-accent hover:bg-accent-hover rounded-lg text-sm font-medium transition-colors">
+                导出
+            </button>
+        </div>
+    </header>
+    
+    <!-- Main Content -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- Left Panel - Material Library -->
+        <aside class="w-52 bg-bg-panel border-r border-border flex flex-col flex-shrink-0">
+            <div class="p-3 border-b border-border flex items-center justify-between">
+                <span class="text-sm font-medium">📁 素材库</span>
+                <div class="flex gap-1">
+                    <button class="w-6 h-6 rounded hover:bg-bg-card flex items-center justify-center text-xs" title="导入">📥</button>
+                    <button class="w-6 h-6 rounded hover:bg-bg-card flex items-center justify-center text-xs" title="新建文件夹">📂</button>
+                </div>
+            </div>
+            
+            <!-- Search -->
+            <div class="p-2">
+                <input type="text" placeholder="🔍 搜索..." 
+                       class="w-full bg-bg-card border border-border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent">
+            </div>
+            
+            <!-- Material List -->
+            <div class="flex-1 overflow-y-auto p-2 space-y-1">
+                <!-- Audio Files -->
+                <div class="text-xs text-gray-500 px-2 py-1">🎵 音频文件</div>
+                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-card cursor-pointer text-sm">
+                    <span>▶️</span>
+                    <span class="flex-1 truncate">demo_cyberpunk.mp3</span>
+                    <span class="text-xs text-gray-500">3:45</span>
+                </div>
+                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-card cursor-pointer text-sm">
+                    <span>📄</span>
+                    <span class="flex-1 truncate">歌词.lrc</span>
+                </div>
+                
+                <!-- AI Generated -->
+                <div class="text-xs text-gray-500 px-2 py-1 mt-3">✨ AI生成</div>
+                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-card cursor-pointer text-sm bg-accent/10 border border-accent/30">
+                    <span>🖼️</span>
+                    <span class="flex-1 truncate">kf_赛博都市_001</span>
+                </div>
+                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-card cursor-pointer text-sm">
+                    <span>🖼️</span>
+                    <span class="flex-1 truncate">kf_霓虹_002</span>
+                </div>
+                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-card cursor-pointer text-sm">
+                    <span>🎬</span>
+                    <span class="flex-1 truncate">vid_脉冲_01</span>
+                </div>
+                
+                <!-- Style Presets -->
+                <div class="text-xs text-gray-500 px-2 py-1 mt-3">🎨 风格预设</div>
+                <div class="grid grid-cols-2 gap-1">
+                    <div class="aspect-video rounded bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center text-xs cursor-pointer hover:ring-2 ring-accent">赛博</div>
+                    <div class="aspect-video rounded bg-gradient-to-br from-pink-900 to-purple-900 flex items-center justify-center text-xs cursor-pointer hover:ring-2 ring-accent">梦幻</div>
+                    <div class="aspect-video rounded bg-gradient-to-br from-orange-900 to-red-900 flex items-center justify-center text-xs cursor-pointer hover:ring-2 ring-accent">火焰</div>
+                    <div class="aspect-video rounded bg-gradient-to-br from-cyan-900 to-blue-900 flex items-center justify-center text-xs cursor-pointer hover:ring-2 ring-accent">极简</div>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- Center - Preview Area -->
+        <main class="flex-1 flex flex-col bg-bg-primary min-w-0">
+            
+            <!-- Preview Canvas -->
+            <div class="flex-1 p-4 flex flex-col min-h-0">
+                <div class="flex-1 bg-bg-card rounded-xl border border-border flex items-center justify-center relative overflow-hidden">
+                    <!-- Preview Content -->
+                    <div class="absolute inset-0 flex items-center justify-center">
+                        <div class="text-center">
+                            <div class="w-64 h-36 bg-gradient-to-br from-blue-900 via-purple-900 to-pink-900 rounded-lg mb-4 flex items-center justify-center">
+                                <span class="text-4xl">🌃</span>
+                            </div>
+                            <div class="text-sm text-gray-400">预览区域</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Playback Controls -->
+                    <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/60 backdrop-blur px-4 py-2 rounded-full">
+                        <button class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center">⏮️</button>
+                        <button class="w-10 h-10 rounded-full bg-accent hover:bg-accent-hover flex items-center justify-center text-lg">▶️</button>
+                        <button class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center">⏭️</button>
+                        <span class="text-sm font-mono ml-2">00:01:32 / 00:03:45</span>
+                    </div>
+                </div>
+                
+                <!-- Audio Waveform -->
+                <div class="h-16 bg-bg-panel rounded-lg border border-border mt-3 px-2 flex items-center overflow-hidden relative">
+                    <div class="waveform flex-1 h-full" style="width: 200%;"></div>
+                    <div class="playhead" style="left: 25%;"></div>
+                </div>
+                
+                <!-- Aspect Ratio Toggle -->
+                <div class="flex items-center justify-center gap-4 mt-3 text-sm text-gray-400">
+                    <button class="px-3 py-1 rounded bg-accent text-white">🖥️ 16:9</button>
+                    <button class="px-3 py-1 rounded hover:bg-bg-card">9:16</button>
+                    <button class="px-3 py-1 rounded hover:bg-bg-card">1:1</button>
+                    <span class="mx-2">|</span>
+                    <button class="px-3 py-1 rounded hover:bg-bg-card">🔲 全屏</button>
+                    <button class="px-3 py-1 rounded hover:bg-bg-card">📐 参考线</button>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Right Panel - Properties/AI Config -->
+        <aside class="w-72 bg-bg-panel border-l border-border flex flex-col flex-shrink-0">
+            
+            <!-- Tabs -->
+            <div class="flex border-b border-border p-2 gap-1">
+                <button class="tab-btn active flex-1 py-1.5 rounded text-xs font-medium">属性</button>
+                <button class="tab-btn flex-1 py-1.5 rounded text-xs font-medium text-gray-400 hover:bg-bg-card">AI生成</button>
+                <button class="tab-btn flex-1 py-1.5 rounded text-xs font-medium text-gray-400 hover:bg-bg-card">节点</button>
+            </div>
+            
+            <!-- Properties Panel -->
+            <div class="flex-1 overflow-y-auto p-3 space-y-4">
+                
+                <!-- Current Clip -->
+                <div class="bg-bg-card rounded-lg p-3 border border-border">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-medium">📊 当前片段</span>
+                        <span class="text-xs text-accent">kf_赛博都市_001</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="bg-bg-primary rounded p-2">
+                            <div class="text-gray-500">开始</div>
+                            <div class="font-mono">00:00:00</div>
+                        </div>
+                        <div class="bg-bg-primary rounded p-2">
+                            <div class="text-gray-500">结束</div>
+                            <div class="font-mono">00:00:05</div>
+                        </div>
+                        <div class="bg-bg-primary rounded p-2">
+                            <div class="text-gray-500">分辨率</div>
+                            <div class="font-mono">1920×1080</div>
+                        </div>
+                        <div class="bg-bg-primary rounded p-2">
+                            <div class="text-gray-500">帧率</div>
+                            <div class="font-mono">30 FPS</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- AI Image Generation -->
+                <div class="bg-bg-card rounded-lg p-3 border border-border">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-sm font-medium">🖼️ AI生图</span>
+                        <select class="bg-bg-primary border border-border rounded px-2 py-1 text-xs">
+                            <option>MiniMax</option>
+                            <option>Gemini</option>
+                            <option>DALL-E</option>
+                        </select>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">提示词</label>
+                            <textarea class="w-full h-20 bg-bg-primary border border-border rounded-lg p-2 text-sm resize-none outline-none focus:border-accent"
+                                placeholder="Cyberpunk city at night with neon lights...">Cyberpunk city at night, neon lights reflecting on wet streets, futuristic atmosphere, cinematic lighting</textarea>
+                        </div>
+                        
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">负面提示词</label>
+                            <input type="text" value="blurry, low quality, distorted" 
+                                   class="w-full bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent">
+                        </div>
+                        
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">种子</label>
+                            <div class="flex gap-2">
+                                <input type="text" value="随机" class="flex-1 bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent">
+                                <button class="px-3 py-1.5 bg-bg-primary border border-border rounded-lg hover:border-accent">🎲</button>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">步数: <span class="text-accent">30</span></label>
+                            <input type="range" min="10" max="50" value="30" class="w-full accent-accent">
+                        </div>
+                        
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">CFG: <span class="text-accent">7.5</span></label>
+                            <input type="range" min="1" max="15" value="7.5" step="0.5" class="w-full accent-accent">
+                        </div>
+                        
+                        <button class="w-full py-2 bg-accent hover:bg-accent-hover rounded-lg text-sm font-medium transition-colors">
+                            ✨ 生成图像
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- AI Video Generation -->
+                <div class="bg-bg-card rounded-lg p-3 border border-border">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-sm font-medium">🎬 图生视频</span>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">视频模型</label>
+                            <select class="w-full bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm">
+                                <option>Kling 1.0 (推荐)</option>
+                                <option>Seedance</option>
+                                <option>Runway</option>
+                            </select>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-400 mb-1 block">时长</label>
+                                <select class="w-full bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm">
+                                    <option>5秒</option>
+                                    <option>10秒</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400 mb-1 block">运镜</label>
+                                <select class="w-full bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm">
+                                    <option>自动</option>
+                                    <option>推近</option>
+                                    <option>拉远</option>
+                                    <option>平移</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <button class="w-full py-2 bg-accent hover:bg-accent-hover rounded-lg text-sm font-medium transition-colors">
+                            🎬 生成视频
+                        </button>
+                    </div>
+                </div>
+                
+            </div>
+        </aside>
+    </div>
+    
+    <!-- Bottom - Timeline + Node Flow -->
+    <div class="h-72 bg-bg-panel border-t border-border flex flex-col flex-shrink-0">
+        
+        <!-- Timeline Tabs -->
+        <div class="flex items-center justify-between px-4 py-2 border-b border-border">
+            <div class="flex gap-1">
+                <button class="tab-btn active px-4 py-1 rounded text-sm font-medium" onclick="showTab('timeline')">📐 时间线</button>
+                <button class="tab-btn px-4 py-1 rounded text-sm font-medium text-gray-400" onclick="showTab('nodes')">🔗 节点流程</button>
+                <button class="tab-btn px-4 py-1 rounded text-sm font-medium text-gray-400" onclick="showTab('batch')">📦 批量生成</button>
+            </div>
+            
+            <div class="flex items-center gap-4 text-sm text-gray-400">
+                <span>▶ 00:05:32 / 00:03:45</span>
+                <button class="hover:text-white">⚙️</button>
+            </div>
+        </div>
+        
+        <!-- Timeline View -->
+        <div id="timeline-view" class="flex-1 overflow-auto p-3">
+            <div class="min-w-full">
+                <!-- Timeline Ruler -->
+                <div class="flex h-6 mb-2 text-xs text-gray-500 pl-24">
+                    <div class="w-16"></div>
+                    <div class="flex-1 timeline-track relative">
+                        <span class="absolute left-0">0s</span>
+                        <span class="absolute left-[12.5%]">5s</span>
+                        <span class="absolute left-[25%]">10s</span>
+                        <span class="absolute left-[37.5%]">15s</span>
+                        <span class="absolute left-[50%]">20s</span>
+                        <span class="absolute left-[62.5%]">25s</span>
+                        <span class="absolute left-[75%]">30s</span>
+                        <span class="absolute left-[87.5%]">35s</span>
+                    </div>
+                </div>
+                
+                <!-- Audio Track -->
+                <div class="flex h-10 mb-2">
+                    <div class="w-24 flex items-center text-xs text-gray-400 pr-2">
+                        <span>🎵</span>
+                        <span class="ml-1 truncate">音频</span>
+                    </div>
+                    <div class="flex-1 bg-bg-card rounded relative overflow-hidden">
+                        <div class="absolute inset-0 waveform opacity-30"></div>
+                        <div class="playhead" style="left: 25%;"></div>
+                    </div>
+                </div>
+                
+                <!-- Main Video Track -->
+                <div class="flex h-12 mb-2">
+                    <div class="w-24 flex items-center text-xs text-gray-400 pr-2">
+                        <span>📺</span>
+                        <span class="ml-1 truncate">主视频</span>
+                    </div>
+                    <div class="flex-1 relative">
+                        <div class="absolute inset-0 timeline-track"></div>
+                        <div class="playhead" style="left: 25%;"></div>
+                        
+                        <!-- Clips -->
+                        <div class="absolute top-1 bottom-1 left-0 w-[15%]">
+                            <div class="clip-block">kf_赛博_001</div>
+                        </div>
+                        <div class="absolute top-1 bottom-1 left-[16%] w-[8%]">
+                            <div class="clip-block" style="background: linear-gradient(135deg, #10B981, #059669);">过渡</div>
+                        </div>
+                        <div class="absolute top-1 bottom-1 left-[25%] w-[20%]">
+                            <div class="clip-block">kf_霓虹_002</div>
+                        </div>
+                        <div class="absolute top-1 bottom-1 left-[46%] w-[8%]">
+                            <div class="clip-block" style="background: linear-gradient(135deg, #10B981, #059669);">过渡</div>
+                        </div>
+                        <div class="absolute top-1 bottom-1 left-[55%] w-[15%]">
+                            <div class="clip-block">kf_脉冲_003</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Overlay Track -->
+                <div class="flex h-10 mb-2">
+                    <div class="w-24 flex items-center text-xs text-gray-400 pr-2">
+                        <span>🎨</span>
+                        <span class="ml-1 truncate">叠加层</span>
+                    </div>
+                    <div class="flex-1 bg-bg-card rounded relative">
+                        <div class="playhead" style="left: 25%;"></div>
+                        <div class="absolute top-1 bottom-1 left-[5%] w-[60%]">
+                            <div class="h-full bg-accent/30 rounded border border-accent/50 flex items-center justify-center text-xs">
+                                粒子效果 A (循环)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Lyrics Track -->
+                <div class="flex h-8">
+                    <div class="w-24 flex items-center text-xs text-gray-400 pr-2">
+                        <span>📝</span>
+                        <span class="ml-1 truncate">歌词</span>
+                    </div>
+                    <div class="flex-1 relative">
+                        <div class="playhead" style="left: 25%;"></div>
+                        <div class="absolute top-0 bottom-0 left-[2%] flex">
+                            <div class="px-2 py-0.5 bg-pink-500/30 rounded text-xs mr-1">「城市霓虹」</div>
+                            <div class="px-2 py-0.5 bg-pink-500/30 rounded text-xs mr-1">「车流不息」</div>
+                            <div class="px-2 py-0.5 bg-pink-500/30 rounded text-xs">「夜」</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Node Flow View -->
+        <div id="nodes-view" class="flex-1 overflow-auto p-3 hidden">
+            <div class="flex gap-4 min-h-full items-center justify-center">
+                
+                <!-- Nodes -->
+                <div class="node p-3 text-center">
+                    <div class="text-2xl mb-1">🎵</div>
+                    <div class="text-xs font-medium">音频输入</div>
+                    <div class="text-xs text-gray-500 mt-1">demo.mp3</div>
+                </div>
+                
+                <div class="text-accent text-2xl">→</div>
+                
+                <div class="node p-3 text-center">
+                    <div class="text-2xl mb-1">📊</div>
+                    <div class="text-xs font-medium">BPM分析</div>
+                    <div class="text-xs text-accent mt-1">128 BPM</div>
+                </div>
+                
+                <div class="text-accent text-2xl">→</div>
+                
+                <div class="node p-3 text-center">
+                    <div class="text-2xl mb-1">📝</div>
+                    <div class="text-xs font-medium">歌词NLP</div>
+                    <div class="text-xs text-gray-500 mt-1">已分析</div>
+                </div>
+                
+                <div class="text-accent text-2xl">→</div>
+                
+                <div class="node p-3 text-center border-accent">
+                    <div class="text-2xl mb-1">✨</div>
+                    <div class="text-xs font-medium">Prompt生成</div>
+                    <div class="text-xs text-accent mt-1">5个片段</div>
+                </div>
+                
+                <div class="text-accent text-2xl">→</div>
+                
+                <div class="node p-3 text-center">
+                    <div class="text-2xl mb-1">🎨</div>
+                    <div class="text-xs font-medium">风格选择</div>
+                    <div class="text-xs text-gray-500 mt-1">赛博朋克</div>
+                </div>
+                
+                <div class="text-accent text-2xl">→</div>
+                
+                <div class="node p-3 text-center">
+                    <div class="text-2xl mb-1">🖼️</div>
+                    <div class="text-xs font-medium">静帧生成</div>
+                    <div class="text-xs text-accent mt-1">3/5 完成</div>
+                </div>
+                
+                <div class="text-accent text-2xl">→</div>
+                
+                <div class="node p-3 text-center">
+                    <div class="text-2xl mb-1">🎬</div>
+                    <div class="text-xs font-medium">视频生成</div>
+                    <div class="text-xs text-gray-500 mt-1">等待中</div>
+                </div>
+                
+                <div class="text-accent text-2xl">→</div>
+                
+                <div class="node p-3 text-center bg-accent/20 border-accent">
+                    <div class="text-2xl mb-1">📺</div>
+                    <div class="text-xs font-medium">渲染输出</div>
+                    <div class="text-xs text-gray-500 mt-1">准备就绪</div>
+                </div>
+                
+            </div>
+            
+            <div class="flex justify-center gap-2 mt-4">
+                <button class="px-4 py-2 bg-bg-card hover:bg-border rounded-lg text-sm">➕ 添加节点</button>
+                <button class="px-4 py-2 bg-bg-card hover:bg-border rounded-lg text-sm">🔄 自动布局</button>
+                <button class="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg text-sm">▶️ 运行流程</button>
+            </div>
+        </div>
+        
+        <!-- Batch Generate View -->
+        <div id="batch-view" class="flex-1 overflow-auto p-3 hidden">
+            <div class="bg-bg-card rounded-lg p-4">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-medium">📦 批量生成任务</h3>
+                    <button class="px-3 py-1 bg-accent hover:bg-accent-hover rounded text-sm">➕ 新建任务</button>
+                </div>
+                
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-gray-500 text-xs">
+                            <th class="text-left py-2">片段</th>
+                            <th class="text-left py-2">类型</th>
+                            <th class="text-left py-2">状态</th>
+                            <th class="text-left py-2">进度</th>
+                            <th class="text-right py-2">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-gray-300">
+                        <tr class="border-t border-border">
+                            <td class="py-2">kf_赛博都市_001</td>
+                            <td class="py-2">🖼️ 静帧</td>
+                            <td class="py-2"><span class="text-accent-success">✓ 完成</span></td>
+                            <td class="py-2">100%</td>
+                            <td class="py-2 text-right">
+                                <button class="text-accent hover:underline">查看</button>
+                            </td>
+                        </tr>
+                        <tr class="border-t border-border">
+                            <td class="py-2">kf_霓虹_002</td>
+                            <td class="py-2">🖼️ 静帧</td>
+                            <td class="py-2"><span class="text-accent-warning">⚡ 生成中</span></td>
+                            <td class="py-2">
+                                <div class="w-24 h-2 bg-bg-primary rounded-full overflow-hidden">
+                                    <div class="h-full bg-accent rounded-full" style="width: 65%;"></div>
+                                </div>
+                            </td>
+                            <td class="py-2 text-right">
+                                <button class="text-gray-500 hover:underline">取消</button>
+                            </td>
+                        </tr>
+                        <tr class="border-t border-border">
+                            <td class="py-2">kf_脉冲_003</td>
+                            <td class="py-2">🎬 视频</td>
+                            <td class="py-2"><span class="text-gray-500">⏳ 排队中</span></td>
+                            <td class="py-2">0%</td>
+                            <td class="py-2 text-right">
+                                <button class="text-gray-500 hover:underline">取消</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showTab(tab) {
+            // Update buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                btn.classList.add('text-gray-400');
+            });
+            event.target.classList.add('active');
+            event.target.classList.remove('text-gray-400');
+            
+            // Update views
+            document.getElementById('timeline-view').classList.add('hidden');
+            document.getElementById('nodes-view').classList.add('hidden');
+            document.getElementById('batch-view').classList.add('hidden');
+            document.getElementById(tab + '-view').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>

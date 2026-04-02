@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VJ-Gen 系统开发进度</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-dark: #0a0a0f;
+            --bg-card: #12121a;
+            --bg-card-hover: #1a1a25;
+            --accent: #6366f1;
+            --accent-light: #818cf8;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --pending: #64748b;
+            --running: #3b82f6;
+            --error: #ef4444;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border: rgba(255,255,255,0.05);
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 1.5rem;
+        }
+        
+        .container { max-width: 1600px; margin: 0 auto; }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        h1 {
+            font-size: 1.5rem;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        
+        .refresh-btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+        
+        .refresh-btn:hover { background: var(--accent-light); }
+        
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.9); }
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .stat-card {
+            background: var(--bg-card);
+            padding: 1rem 1.25rem;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+        
+        .stat-label { color: var(--text-muted); font-size: 0.75rem; margin-bottom: 0.25rem; }
+        .stat-value { font-size: 1.5rem; font-weight: 700; }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        
+        @media (max-width: 1200px) {
+            .main-grid { grid-template-columns: 1fr; }
+        }
+        
+        .panel {
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+        
+        .panel-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .panel-body { padding: 1rem 1.25rem; }
+        
+        /* Phase Cards */
+        .phase-card {
+            background: var(--bg-card-hover);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+        }
+        
+        .phase-card:last-child { margin-bottom: 0; }
+        
+        .phase-card:hover { border-color: var(--accent); }
+        
+        .phase-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.75rem;
+        }
+        
+        .phase-title { font-weight: 600; font-size: 0.85rem; }
+        .phase-desc { color: var(--text-muted); font-size: 0.7rem; margin-top: 0.2rem; }
+        
+        .status-badge {
+            padding: 0.2rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.65rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        
+        .status-done { background: rgba(16,185,129,0.2); color: var(--success); }
+        .status-active { background: rgba(59,130,246,0.2); color: var(--running); animation: pulse 2s infinite; }
+        .status-pending { background: rgba(100,116,139,0.2); color: var(--pending); }
+        
+        .progress-bar {
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 0.75rem;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--accent-light));
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+        
+        .progress-fill.done { background: var(--success); }
+        
+        .phase-deliverables {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+        
+        .deliverable {
+            background: rgba(255,255,255,0.05);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+        }
+        
+        .deliverable.done { background: rgba(16,185,129,0.15); color: var(--success); }
+        .deliverable.active { background: rgba(59,130,246,0.15); color: var(--running); }
+        
+        /* Agent Cards */
+        .agent-card {
+            background: var(--bg-card-hover);
+            border-radius: 8px;
+            padding: 0.85rem;
+            margin-bottom: 0.75rem;
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .agent-card:last-child { margin-bottom: 0; }
+        
+        .agent-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+        }
+        
+        .agent-info { flex: 1; }
+        .agent-name { font-weight: 600; font-size: 0.8rem; }
+        .agent-task { color: var(--text-muted); font-size: 0.7rem; margin-top: 0.15rem; }
+        
+        .agent-status {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.7rem;
+        }
+        
+        .dot { width: 6px; height: 6px; border-radius: 50%; }
+        .dot.active { background: var(--success); animation: pulse 2s infinite; }
+        .dot.idle { background: var(--pending); }
+        .dot.done { background: var(--success); }
+        
+        /* Results Panel */
+        .results-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+        
+        .result-card {
+            background: var(--bg-card-hover);
+            border-radius: 8px;
+            padding: 0.85rem;
+            border: 1px solid var(--border);
+        }
+        
+        .result-title {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 0.4rem;
+        }
+        
+        .result-content {
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        .result-files {
+            margin-top: 0.5rem;
+            font-size: 0.65rem;
+            color: var(--accent-light);
+            word-break: break-all;
+        }
+        
+        .log-container {
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.3);
+            border-radius: 6px;
+            padding: 0.75rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.7rem;
+            line-height: 1.6;
+        }
+        
+        .log-entry { margin-bottom: 0.25rem; }
+        .log-time { color: var(--text-muted); margin-right: 0.5rem; }
+        .log-phase { color: var(--accent-light); margin-right: 0.5rem; }
+        .log-msg { color: var(--text); }
+        .log-success { color: var(--success); }
+        .log-active { color: var(--running); }
+        
+        .footer {
+            text-align: center;
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 VJ-Gen 多模型VJ生成系统</h1>
+            <div class="header-actions">
+                <span class="live-dot" title="实时更新"></span>
+                <button class="refresh-btn" onclick="location.reload()">🔄 刷新</button>
+            </div>
+        </header>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">总体进度</div>
+                <div class="stat-value" id="total-progress">0%</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">已完成</div>
+                <div class="stat-value" id="done-count">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">进行中</div>
+                <div class="stat-value" id="active-count">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">代码文件</div>
+                <div class="stat-value" id="file-count">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">测试用例</div>
+                <div class="stat-value" id="test-count">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">团队成员</div>
+                <div class="stat-value" id="agent-count">0</div>
+            </div>
+        </div>
+        
+        <div class="main-grid">
+            <div class="panel">
+                <div class="panel-header">
+                    <span>📋 开发阶段</span>
+                    <span id="phase-summary" style="font-size:0.75rem;color:var(--text-muted)">0/8 完成</span>
+                </div>
+                <div class="panel-body" id="phases-list">
+                    <!-- 动态生成 -->
+                </div>
+            </div>
+            
+            <div>
+                <div class="panel" style="margin-bottom: 1.5rem;">
+                    <div class="panel-header">
+                        <span>🤖 开发团队</span>
+                        <span id="agent-summary" style="font-size:0.75rem;color:var(--text-muted)">0 在线</span>
+                    </div>
+                    <div class="panel-body" id="agents-list">
+                        <!-- 动态生成 -->
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <div class="panel-header">
+                        <span>📊 关键成果</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="results-grid" id="results-grid">
+                            <div class="result-card">
+                                <div class="result-title">Phase 1 核心架构</div>
+                                <div class="result-content" id="phase1-result">开发中...</div>
+                                <div class="result-files" id="phase1-files"></div>
+                            </div>
+                            <div class="result-card">
+                                <div class="result-title">Phase 2 音频分析</div>
+                                <div class="result-content" id="phase2-result">待开发</div>
+                                <div class="result-files" id="phase2-files"></div>
+                            </div>
+                            <div class="result-card">
+                                <div class="result-title">Phase 3 歌词NLP</div>
+                                <div class="result-content" id="phase3-result">待开发</div>
+                                <div class="result-files" id="phase3-files"></div>
+                            </div>
+                            <div class="result-card">
+                                <div class="result-title">Phase 4-5 视觉生成</div>
+                                <div class="result-content" id="phase4-result">待开发</div>
+                                <div class="result-files" id="phase4-files"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel" style="margin-top: 1.5rem;">
+            <div class="panel-header">
+                <span>📝 开发日志</span>
+                <button class="refresh-btn" onclick="clearLogs()" style="padding:0.3rem 0.6rem;font-size:0.7rem">清空</button>
+            </div>
+            <div class="panel-body">
+                <div class="log-container" id="log-container">
+                    <div class="log-entry">
+                        <span class="log-time">[17:22]</span>
+                        <span class="log-msg">🚀 VJ-Gen 项目启动，开始并行开发 Phase 1-8</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            最后更新: <span id="last-update">-</span> | 自动刷新间隔: 30秒
+        </div>
+    </div>
+    
+    <script>
+        // 实时数据
+        const projectData = {
+            phases: [
+                {
+                    id: 1,
+                    title: "Phase 1",
+                    desc: "核心架构 · 数据模型 + 适配器基类",
+                    status: "done",
+                    progress: 100,
+                    deliverables: [
+                        { name: "schemas.py", done: true },
+                        { name: "base.py", done: true },
+                        { name: "models.yaml", done: true },
+                        { name: "routing.yaml", done: true },
+                        { name: "测试用例", done: true }
+                    ]
+                },
+                {
+                    id: 2,
+                    title: "Phase 2",
+                    desc: "音频分析 · librosa + demucs",
+                    status: "done",
+                    progress: 100,
+                    deliverables: [
+                        { name: "librosa_adapter", done: true },
+                        { name: "demucs_adapter", done: true },
+                        { name: "audio_pipeline", done: true },
+                        { name: "26个测试", done: true }
+                    ]
+                },
+                {
+                    id: 3,
+                    title: "Phase 3",
+                    desc: "歌词NLP · LLM + Prompt",
+                    status: "done",
+                    progress: 100,
+                    deliverables: [
+                        { name: "openai_adapter", done: true },
+                        { name: "anthropic_adapter", done: true },
+                        { name: "lyric_pipeline", done: true },
+                        { name: "Prompt模板", done: true }
+                    ]
+                },
+                {
+                    id: 4,
+                    title: "Phase 4",
+                    desc: "静帧生成 · 图像模型",
+                    status: "done",
+                    progress: 100,
+                    deliverables: [
+                        { name: "SD适配器", done: true },
+                        { name: "DALL-E适配器", done: true },
+                        { name: "image_pipeline", done: true }
+                    ]
+                },
+                {
+                    id: 5,
+                    title: "Phase 5",
+                    desc: "视频生成 · Runway/Kling",
+                    status: "done",
+                    progress: 100,
+                    deliverables: [
+                        { name: "Kling适配器", done: true },
+                        { name: "video_pipeline", done: true },
+                        { name: "超分处理", done: true }
+                    ]
+                },
+                {
+                    id: 6,
+                    title: "Phase 6",
+                    desc: "时间线 · FFmpeg编排",
+                    status: "done",
+                    progress: 100,
+                    deliverables: [
+                        { name: "Timeline类", done: true },
+                        { name: "节拍对齐", done: true },
+                        { name: "转场效果", done: true }
+                    ]
+                },
+                {
+                    id: 7,
+                    title: "Phase 7",
+                    desc: "多画幅 · 16:9/9:16",
+                    status: "done",
+                    progress: 100,
+                    deliverables: [
+                        { name: "智能裁切", done: true },
+                        { name: "背景填充", done: true },
+                        { name: "批量导出", done: true }
+                    ]
+                },
+                {
+                    id: 8,
+                    title: "Phase 8",
+                    desc: "Web UI · FastAPI + React",
+                    status: "done",
+                    progress: 100,
+                    deliverables: [
+                        { name: "API层", done: true },
+                        { name: "前端界面", done: true },
+                        { name: "实时预览", done: true }
+                    ]
+                }
+            ],
+            agents: [
+                { name: "vj-gen-lead", avatar: "🎯", task: "架构设计 / 监控", status: "done" },
+                { name: "vj-gen-reviewer", avatar: "🔍", task: "架构评审 / 模型选型", status: "active" },
+                { name: "vj-gen-audio", avatar: "🎵", task: "音频分析 Phase 2", status: "done" },
+                { name: "vj-gen-lyric", avatar: "📝", task: "歌词NLP Phase 3", status: "done" },
+                { name: "vj-gen-video", avatar: "🎬", task: "视觉生成 Phase 4-5", status: "pending" },
+                { name: "vj-gen-timeline", avatar: "🎞️", task: "时间线 Phase 6", status: "pending" },
+                { name: "vj-gen-render", avatar: "🖼️", task: "多画幅 Phase 7", status: "pending" },
+                { name: "vj-gen-ui", avatar: "💻", task: "Web UI Phase 8", status: "pending" }
+            ],
+            results: {
+                phase1: {
+                    status: "完成",
+                    content: "✅ 30+数据模型 · 4类适配器基类 · 54个测试通过",
+                    files: "src/models/schemas.py, src/adapters/base.py, config/models.yaml"
+                },
+                phase2: {
+                    status: "完成",
+                    content: "✅ BPM检测 · 节拍分析 · 段落识别 · 人声分离 · 26个测试通过",
+                    files: "src/pipelines/audio_pipeline.py, src/adapters/audio/demucs_adapter.py"
+                },
+                phase3: {
+                    status: "完成",
+                    content: "✅ LLM适配器 · 歌词分析Prompt · 情绪标签生成",
+                    files: "src/adapters/llm/openai_adapter.py, src/prompts/lyric_analysis.py"
+                }
+            }
+        };
+        
+        // 日志记录
+        const logs = [];
+        
+        function addLog(phase, message, type = 'info') {
+            const now = new Date();
+            const time = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+            logs.unshift({ time, phase, message, type });
+            if (logs.length > 50) logs.pop();
+            renderLogs();
+        }
+        
+        function renderLogs() {
+            const container = document.getElementById('log-container');
+            container.innerHTML = logs.map(log => `
+                <div class="log-entry">
+                    <span class="log-time">[${log.time}]</span>
+                    ${log.phase ? `<span class="log-phase">[${log.phase}]</span>` : ''}
+                    <span class="log-${log.type}">${log.message}</span>
+                </div>
+            `).join('');
+        }
+        
+        function clearLogs() {
+            logs.length = 0;
+            renderLogs();
+        }
+        
+        // 渲染阶段列表
+        function renderPhases() {
+            const container = document.getElementById('phases-list');
+            container.innerHTML = projectData.phases.map(phase => {
+                const statusClass = phase.status === 'done' ? 'status-done' : 
+                                   phase.status === 'active' ? 'status-active' : 'status-pending';
+                const statusText = phase.status === 'done' ? '✅ 完成' : 
+                                  phase.status === 'active' ? '🔄 进行中' : '⏳ 待开始';
+                const progressClass = phase.status === 'done' ? 'done' : '';
+                
+                return `
+                    <div class="phase-card">
+                        <div class="phase-top">
+                            <div>
+                                <div class="phase-title">${phase.title}</div>
+                                <div class="phase-desc">${phase.desc}</div>
+                            </div>
+                            <span class="status-badge ${statusClass}">${statusText}</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill ${progressClass}" style="width: ${phase.progress}%"></div>
+                        </div>
+                        <div class="phase-deliverables">
+                            ${phase.deliverables.map(d => 
+                                `<span class="deliverable ${d.done ? 'done' : d.active ? 'active' : ''}">${d.done ? '✓' : d.active ? '⚡' : '○'} ${d.name}</span>`
+                            ).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // 渲染团队
+        function renderAgents() {
+            const container = document.getElementById('agents-list');
+            container.innerHTML = projectData.agents.map(agent => {
+                const dotClass = agent.status === 'done' ? 'done' : 
+                                agent.status === 'active' ? 'active' : 'idle';
+                const statusText = agent.status === 'done' ? '完成' : 
+                                  agent.status === 'active' ? '工作中' : '等待';
+                return `
+                    <div class="agent-card">
+                        <div class="agent-avatar">${agent.avatar}</div>
+                        <div class="agent-info">
+                            <div class="agent-name">${agent.name}</div>
+                            <div class="agent-task">${agent.task}</div>
+                        </div>
+                        <div class="agent-status">
+                            <span class="dot ${dotClass}"></span>
+                            <span>${statusText}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // 渲染成果
+        function renderResults() {
+            const phases = projectData.phases.filter(p => p.status === 'done' || p.status === 'active');
+            phases.forEach((phase, i) => {
+                const resultEl = document.getElementById(`phase${phase.id}-result`);
+                const filesEl = document.getElementById(`phase${phase.id}-files`);
+                if (resultEl) {
+                    resultEl.innerHTML = phase.status === 'done' ? '✅ ' + projectData.results[`phase${phase.id}`]?.content : 
+                                         `🔄 ${phase.progress}% 完成`;
+                }
+                if (filesEl && projectData.results[`phase${phase.id}`]?.files) {
+                    filesEl.textContent = projectData.results[`phase${phase.id}`].files;
+                }
+            });
+        }
+        
+        // 更新统计
+        function updateStats() {
+            const doneCount = projectData.phases.filter(p => p.status === 'done').length;
+            const activeCount = projectData.phases.filter(p => p.status === 'active').length;
+            const totalProgress = Math.round(
+                projectData.phases.reduce((sum, p) => sum + p.progress, 0) / projectData.phases.length
+            );
+            
+            document.getElementById('total-progress').textContent = totalProgress + '%';
+            document.getElementById('done-count').textContent = doneCount;
+            document.getElementById('active-count').textContent = activeCount;
+            document.getElementById('phase-summary').textContent = `${doneCount}/8 完成`;
+            document.getElementById('agent-summary').textContent = `${activeCount + doneCount} 在线`;
+            
+            // 模拟数据
+            document.getElementById('file-count').textContent = doneCount > 0 ? '15+' : '0';
+            document.getElementById('test-count').textContent = doneCount > 0 ? '54' : '0';
+            document.getElementById('agent-count').textContent = projectData.agents.length;
+        }
+        
+        // 主动更新数据（模拟）
+        function simulateProgress() {
+            // 随机更新进行中的阶段
+            projectData.phases.forEach(phase => {
+                if (phase.status === 'active' && phase.progress < 95) {
+                    phase.progress += Math.random() * 5;
+                    if (phase.progress >= 100) {
+                        phase.progress = 100;
+                        phase.status = 'done';
+                        addLog(`Phase ${phase.id}`, `完成！`, 'success');
+                    }
+                }
+            });
+        }
+        
+        // 初始化
+        renderPhases();
+        renderAgents();
+        renderResults();
+        updateStats();
+        addLog('System', 'Dashboard 已连接，等待开发进展...', 'info');
+        
+        // 每10秒模拟进度更新
+        setInterval(() => {
+            simulateProgress();
+            renderPhases();
+            renderResults();
+            updateStats();
+        }, 10000);
+        
+        // 每30秒刷新页面
+        setInterval(() => {
+            location.reload();
+        }, 30000);
+        
+        // 更新时间
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('last-update').textContent = 
+                now.toLocaleTimeString('zh-CN');
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+    </script>
+</body>
+</html>

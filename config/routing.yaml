@@ -1,0 +1,238 @@
+# VJ-Gen 模型路由策略配置
+# 用户实际常用模型：Midjourney / NanoBanana (Gemini) / Kling / Seedance 2.0
+# 最后更新：2026-04-02
+
+# ========================================================================
+# 路由策略类型
+# ========================================================================
+# priority: 按优先级选择（primary 失败后尝试 secondary）
+# cost_aware: 成本感知路由（选择性价比最高的）
+# quality_aware: 质量优先路由（选择质量最高的）
+# balanced: 均衡路由（综合考虑成本、延迟，质量）
+
+# ========================================================================
+# 任务类型路由配置
+# ========================================================================
+
+routing:
+  # ========================================================================
+  # 音频分析路由
+  # ========================================================================
+  audio_analysis:
+    strategy: priority
+    routes:
+      - task: beat_detection
+        provider: local
+        model: librosa
+        priority: 1
+        timeout: 30
+        fallback:
+          - provider: local
+            model: essentia
+            priority: 2
+
+      - task: bpm_detection
+        provider: local
+        model: librosa
+        priority: 1
+        timeout: 30
+
+      - task: vocal_separation
+        provider: local
+        model: demucs
+        priority: 1
+        timeout: 120
+
+      - task: energy_analysis
+        provider: local
+        model: librosa
+        priority: 1
+        timeout: 30
+
+  # ========================================================================
+  # LLM 路由
+  # ========================================================================
+  llm:
+    strategy: priority
+    routes:
+      # 国产LLM优先
+      - task: lyric_analysis
+        provider: minimax
+        model: abab6.5s-chat
+        priority: 1
+        timeout: 60
+        cost_weight: 0.3
+        quality_weight: 0.4
+        best_for: ["歌词分析", "情绪识别", "中文处理"]
+        fallback:
+          - provider: kimi
+            model: moonshot-v1-128k
+            priority: 2
+          - provider: deepseek
+            model: deepseek-chat
+            priority: 3
+
+      - task: prompt_enhance
+        provider: minimax
+        model: abab6.5s-chat
+        priority: 1
+        timeout: 60
+        quality_weight: 1.0
+        best_for: ["Prompt优化", "视觉描述生成"]
+        fallback:
+          - provider: kimi
+            model: moonshot-v1-128k
+            priority: 2
+
+      - task: shot_script_generation
+        provider: kimi
+        model: moonshot-v1-128k
+        priority: 1
+        timeout: 120
+        quality_weight: 1.0
+        best_for: ["脚本生成", "结构化输出"]
+        fallback:
+          - provider: minimax
+            model: abab6.5s-chat
+            priority: 2
+
+      - task: style_suggestion
+        provider: deepseek
+        model: deepseek-chat
+        priority: 1
+        timeout: 60
+        quality_weight: 0.8
+        cost_weight: 0.2
+        best_for: ["风格建议", "创意分析"]
+
+  # ========================================================================
+  # 图像生成路由（用户常用）
+  # ========================================================================
+  image_gen:
+    strategy: balanced
+    routes:
+      # Midjourney - 高质量艺术风格（需要通过第三方API如lexica接入）
+      - task: keyframe_artistic
+        provider: midjourney
+        model: midjourney-v6
+        priority: 1
+        timeout: 120
+        cost_weight: 0.3
+        quality_weight: 0.5
+        latency_weight: 0.2
+        best_for: ["艺术风格", "写实风格", "高质量VJ素材"]
+
+      # NanoBanana - Gemini 3 Pro Image，快速生成
+      - task: keyframe_quick
+        provider: nanobanana
+        model: gemini-3-pro-image
+        priority: 2
+        timeout: 60
+        cost_weight: 0.2
+        quality_weight: 0.4
+        latency_weight: 0.4
+        best_for: ["快速迭代", "概念草图", "预览"]
+
+      # Seedance 2.0 - 国风/中文场景
+      - task: keyframe_chinese
+        provider: seedance
+        model: seedance-2.0-image
+        priority: 3
+        timeout: 90
+        cost_weight: 0.25
+        quality_weight: 0.4
+        latency_weight: 0.35
+        best_for: ["中文场景", "国风", "本地化内容"]
+
+      # DALL-E 3 - 备用
+      - task: keyframe_fallback
+        provider: openai
+        model: dall-e-3
+        priority: 4
+        timeout: 60
+        quality_weight: 1.0
+
+  # ========================================================================
+  # 视频生成路由（用户常用）
+  # ========================================================================
+  video_gen:
+    strategy: quality_aware
+    routes:
+      # Kling - 主要使用，快手视频生成
+      - task: vj_clip_main
+        provider: kling
+        model: kling-1.0
+        priority: 1
+        timeout: 300
+        max_duration: 30
+        cost_weight: 0.3
+        quality_weight: 0.5
+        latency_weight: 0.2
+        best_for: ["动作连贯", "电影感", "音乐节奏"]
+
+      # Seedance 2.0 视频 - 即梦
+      - task: vj_clip_chinese
+        provider: seedance
+        model: seedance-2.0-video
+        priority: 2
+        timeout: 300
+        max_duration: 30
+        cost_weight: 0.3
+        quality_weight: 0.45
+        latency_weight: 0.25
+        best_for: ["中文场景", "国风内容", "快速生成"]
+
+      # Runway Gen-3 - 备用/特殊效果
+      - task: vj_clip_effects
+        provider: runway
+        model: gen-3-alpha
+        priority: 3
+        timeout: 300
+        max_duration: 10
+        cost_weight: 0.4
+        quality_weight: 0.5
+        best_for: ["电影感", "特效", "艺术风格"]
+
+  # ========================================================================
+  # 超分辨率路由
+  # ========================================================================
+  upscale:
+    strategy: quality_aware
+    routes:
+      - task: image_upscale
+        provider: local
+        model: real-esrgan
+        priority: 1
+        timeout: 60
+        cost_weight: 0.0
+        best_for: ["免费", "本地处理"]
+
+      - task: video_upscale
+        provider: topaz
+        model: video-ai
+        priority: 1
+        timeout: 600
+        quality_weight: 1.0
+        best_for: ["高质量视频增强"]
+
+# ========================================================================
+# 全局路由配置
+# ========================================================================
+
+global:
+  default_strategy: balanced
+  timeouts:
+    audio_analysis: 30
+    llm: 60
+    image_gen: 120
+    video_gen: 300
+    upscale: 120
+
+  retry:
+    max_attempts: 3
+    backoff_factor: 2.0
+    max_backoff: 60.0
+
+  degradation:
+    image_gen: "placeholder"
+    video_gen: "interpolate"

@@ -1,0 +1,253 @@
+# VJ-Gen 模型配置文件
+# 定义所有可用模型及其配置
+
+models:
+  # ========================================================================
+  # 音频分析模型
+  # ========================================================================
+  audio:
+    librosa:
+      provider: local
+      model: librosa-default
+      enabled: true
+      description: "librosa 音频分析库（本机运行）"
+      capabilities:
+        - beat_detection
+        - bpm_detection
+        - energy_analysis
+        - onset_detection
+      config:
+        frame_length: 2048
+        hop_length: 512
+        n_fft: 2048
+
+    demucs:
+      provider: local
+      model: demucs-hdemucs-mixes
+      enabled: true
+      description: "人声分离模型"
+      capabilities:
+        - vocal_separation
+        - instrumental_separation
+      config:
+        model_name: hdemucs_mixes
+        device: auto  # cuda 或 cpu
+        shifts: 1
+
+    essentia:
+      provider: local
+      model: essentia-extractor
+      enabled: false
+      description: "Essentia 音频分析库"
+      capabilities:
+        - beat_detection
+        - rhythm_analysis
+        - tonal_analysis
+
+  # ========================================================================
+  # LLM 模型
+  # ========================================================================
+  llm:
+    gpt-4o:
+      provider: openai
+      model: gpt-4o
+      enabled: true
+      description: "OpenAI GPT-4o（主力模型）"
+      api_base: "https://api.openai.com/v1"
+      capabilities:
+        - lyric_analysis
+        - prompt_enhance
+        - shot_script_generation
+        - style_suggestion
+      config:
+        temperature: 0.7
+        max_tokens: 4096
+        context_window: 128000
+
+    gpt-4o-mini:
+      provider: openai
+      model: gpt-4o-mini
+      enabled: true
+      description: "OpenAI GPT-4o Mini（轻量模型）"
+      api_base: "https://api.openai.com/v1"
+      capabilities:
+        - lyric_analysis
+        - prompt_enhance
+      config:
+        temperature: 0.7
+        max_tokens: 4096
+        context_window: 128000
+
+    claude-3-5-sonnet:
+      provider: anthropic
+      model: claude-3-5-sonnet-20241022
+      enabled: true
+      description: "Claude 3.5 Sonnet（备用模型）"
+      api_base: "https://api.anthropic.com/v1"
+      capabilities:
+        - lyric_analysis
+        - prompt_enhance
+        - shot_script_generation
+        - style_suggestion
+      config:
+        temperature: 0.7
+        max_tokens: 8192
+        context_window: 200000
+
+    claude-3-opus:
+      provider: anthropic
+      model: claude-3-opus-20240229
+      enabled: false
+      description: "Claude 3 Opus（高精度模型）"
+      api_base: "https://api.anthropic.com/v1"
+      capabilities:
+        - shot_script_generation
+        - style_suggestion
+      config:
+        temperature: 0.7
+        max_tokens: 8192
+        context_window: 200000
+
+  # ========================================================================
+  # 图像生成模型
+  # ========================================================================
+  image_gen:
+    dall-e-3:
+      provider: openai
+      model: dall-e-3
+      enabled: true
+      description: "DALL-E 3（高质量图像）"
+      capabilities:
+        - text_to_image
+        - high_quality
+      config:
+        quality: "standard"  # standard 或 hd
+        size: "1024x1024"
+        style: "vivid"  # vivid 或 natural
+
+    sd-xl-turbo:
+      provider: stability
+      model: sd-xl-turbo-1.0
+      enabled: true
+      description: "Stable Diffusion XL Turbo（快速生成）"
+      api_base: "https://api.stability.ai/v1"
+      capabilities:
+        - text_to_image
+        - fast_generation
+      config:
+        engine_id: "stable-diffusion-xl-turbo-1.0"
+        steps: 1
+        guidance_scale: 0.0
+
+    sd-xl-1024:
+      provider: stability
+      model: stable-diffusion-xl-1024-v1-0
+      enabled: false
+      description: "Stable Diffusion XL 1.0（高质量）"
+      api_base: "https://api.stability.ai/v1"
+      capabilities:
+        - text_to_image
+        - high_quality
+      config:
+        engine_id: "stable-diffusion-xl-1024-v1-0"
+        steps: 30
+        guidance_scale: 7.5
+
+    leonardo-vision:
+      provider: leonardo
+      model: leonardo-vision
+      enabled: false
+      description: "Leonardo AI Vision"
+      api_base: "https://api.leonardo.ai/v1"
+      capabilities:
+        - text_to_image
+        - style_transfer
+      config:
+        model_id: "vision"
+        guidance_scale: 7.5
+
+  # ========================================================================
+  # 视频生成模型
+  # ========================================================================
+  video_gen:
+    runway-gen3:
+      provider: runway
+      model: gen-3-alpha-turbo
+      enabled: true
+      description: "Runway Gen-3（主力模型）"
+      api_base: "https://api.runwayml.com/v1"
+      capabilities:
+        - image_to_video
+        - text_to_video
+        - high_quality
+      config:
+        max_duration: 10
+        resolution: "720p"
+        fps: 24
+
+    kling-1.0:
+      provider: kling
+      model: kling-1.0
+      enabled: true
+      description: "Kling 1.0（长视频）"
+      api_base: "https://api.kling.ai/v1"
+      capabilities:
+        - image_to_video
+        - text_to_video
+        - long_duration
+      config:
+        max_duration: 30
+        resolution: "720p"
+        fps: 30
+
+    looperator:
+      provider: local
+      model: looperator
+      enabled: true
+      description: "Looperator（本机节拍同步）"
+      capabilities:
+        - beat_sync
+        - style_transfer
+        - video_editing
+      config:
+        device: cuda
+
+  # ========================================================================
+  # 超分辨率模型
+  # ========================================================================
+  upscale:
+    topaz-video-ai:
+      provider: topaz
+      model: video-ai
+      enabled: false
+      description: "Topaz Video AI"
+      capabilities:
+        - video_upscale
+        - frame_interpolation
+      config:
+        model: "denoise-sharpen"
+        scale: 2
+
+    real-esrgan:
+      provider: local
+      model: Real-ESRGAN
+      enabled: true
+      description: "Real-ESRGAN（本机超分）"
+      capabilities:
+        - image_upscale
+        - video_upscale
+      config:
+        model_name: "RealESRGAN_x4plus"
+        tile_size: 256
+
+# ========================================================================
+# 默认配置
+# ========================================================================
+defaults:
+  audio_analysis: librosa
+  vocal_separation: demucs
+  llm: gpt-4o
+  llm_fallback: claude-3-5-sonnet
+  image_gen: sd-xl-turbo
+  video_gen: runway-gen3
+  upscale: real-esrgan

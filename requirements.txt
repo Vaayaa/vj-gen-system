@@ -1,0 +1,53 @@
+# VJ-Gen 系统依赖
+
+# Core
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# FastAPI
+fastapi>=0.109.0
+uvicorn>=0.27.0
+python-multipart>=0.0.6
+
+# Task Queue
+celery>=5.3.0
+redis>=5.0.0
+
+# Storage
+minio>=7.2.0
+boto3>=1.34.0
+
+# Audio Processing
+librosa>=0.10.0
+soundfile>=0.12.0
+demucs>=4.0.0
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Video Processing
+ffmpeg-python>=0.2.0
+opencv-python>=4.8.0
+moviepy>=1.0.3
+Pillow>=10.0.0
+
+# AI Adapters
+openai>=1.0.0
+anthropic>=0.8.0
+requests>=2.31.0
+aiohttp>=3.9.0
+
+# Utilities
+PyYAML>=6.0.0
+python-dotenv>=1.0.0
+httpx>=0.26.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+httpx>=0.26.0
+
+# Development
+black>=23.0.0
+mypy>=1.8.0
+ruff>=0.1.0
