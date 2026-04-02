@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>VJ-Gen 音频分析</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 40px 20px; }
+.container { max-width: 1000px; margin: 0 auto; }
+h1 { font-size: 24px; margin-bottom: 8px; }
+.subtitle { color: #999; margin-bottom: 20px; }
+
+.server-status { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 12px; background: #252525; border-radius: 8px; }
+.server-status .dot { width: 10px; height: 10px; border-radius: 50%; }
+.server-status .dot.online { background: #4ade80; }
+.server-status .dot.offline { background: #ef4444; }
+
+.upload-zone { width: 100%; height: 100px; border: 2px dashed #444; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; margin-bottom: 20px; transition: all 0.2s; }
+.upload-zone:hover { border-color: #ff5500; }
+.upload-zone.has-file { border-color: #333; background: #1e1e2e; height: 50px; }
+
+.results { background: #2d2d2d; border-radius: 8px; padding: 20px; display: none; }
+.results.show { display: block; }
+
+.analysis-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 16px; }
+.analysis-item { text-align: center; background: #252525; padding: 12px; border-radius: 6px; }
+.analysis-value { font-size: 20px; font-weight: 700; color: #ff5500; }
+.analysis-label { font-size: 10px; color: #888; text-transform: uppercase; }
+
+/* Waveform Container */
+.waveform-container { 
+    position: relative; 
+    height: 180px; 
+    background: #1a1a2e; 
+    border-radius: 8px; 
+    margin-bottom: 8px; 
+    overflow: hidden;
+}
+
+/* Section zone - upper 60% */
+.section-zone {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 60%;
+    cursor: crosshair;
+    z-index: 10;
+}
+.section-zone.busy { cursor: wait; }
+.section-zone.can-add { cursor: cell; }
+.section-zone.has-section { cursor: pointer; }
+
+/* Play zone - lower 40% */
+.play-zone {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 40%;
+    z-index: 10;
+}
+.play-zone:hover { cursor: pointer; }
+
+#waveform { width: 100%; height: 100%; display: block; pointer-events: none; }
+
+/* Selection box */
+.selection-box { 
+    position: absolute; top: 0; height: 100%; 
+    background: rgba(255, 85, 0, 0.3); 
+    border: 2px dashed #ff5500; 
+    display: none; pointer-events: none; z-index: 15; 
+}
+
+/* Cursor indicator */
+.cursor-indicator { 
+    position: absolute; top: 50%; transform: translate(-50%, -50%);
+    font-size: 24px; font-weight: bold; 
+    pointer-events: none; z-index: 20;
+    opacity: 0; transition: opacity 0.15s;
+    text-shadow: 0 0 4px rgba(0,0,0,0.8);
+}
+.cursor-indicator.visible { opacity: 1; }
+
+/* Playhead */
+.playhead { 
+    position: absolute; top: 0; bottom: 0; width: 2px; 
+    background: #fff; pointer-events: none; z-index: 25; 
+    box-shadow: 0 0 8px rgba(255,255,255,0.5); 
+}
+.playhead::after { 
+    content: ''; position: absolute; top: -4px; left: -4px; 
+    width: 10px; height: 10px; background: #fff; border-radius: 50%; 
+}
+
+/* Section popup - ensure high z-index */
+.section-popup { 
+    position: fixed !important;
+    background: #2d2d2d; border: 1px solid #444; 
+    border-radius: 8px; padding: 10px; 
+    z-index: 9999 !important; display: none; 
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    min-width: 150px;
+}
+.section-popup.show { display: block; }
+.section-popup-title { font-size: 11px; color: #888; margin-bottom: 8px; text-align: center; border-bottom: 1px solid #333; padding-bottom: 6px; }
+.section-popup-btn { 
+    display: block; width: 100%; padding: 8px 14px; 
+    margin: 4px 0; border: none; border-radius: 4px; 
+    cursor: pointer; font-size: 12px; color: white; 
+    text-align: left; transition: filter 0.2s;
+}
+.section-popup-btn:hover { filter: brightness(1.2); }
+.section-popup-btn.intro { background: #607D8B; }
+.section-popup-btn.verse { background: #2196F3; }
+.section-popup-btn.preChorus { background: #03A9F4; }
+.section-popup-btn.chorus { background: #E91E63; }
+.section-popup-btn.bridge { background: #FF9800; }
+.section-popup-btn.outro { background: #795548; }
+
+/* Beats timeline */
+.beats-timeline { position: relative; height: 24px; background: #1a1a2e; border-radius: 4px; margin-bottom: 16px; overflow: hidden; }
+.beat-marker { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(99,102,241,0.25); }
+.beat-marker.downbeat { background: rgba(99,102,241,0.6); width: 2px; }
+
+/* Controls */
+.controls { display: flex; align-items: center; gap: 12px; }
+.play-btn { width: 36px; height: 36px; border-radius: 50%; background: #ff5500; border: none; color: white; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.time { font-size: 12px; color: #999; min-width: 90px; }
+.time .current { color: #ff5500; }
+.progress-bar { flex: 1; height: 4px; background: #444; border-radius: 2px; cursor: pointer; }
+.progress-fill { height: 100%; background: #ff5500; width: 0%; }
+
+/* Section list */
+.section-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.section-tag { padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.section-tag .time { font-size: 10px; opacity: 0.7; }
+
+/* Help */
+.help { font-size: 11px; color: #888; padding: 8px 12px; background: #1a1a2e; border-radius: 4px; margin-top: 12px; }
+.help strong { color: #ff5500; }
+
+.status { margin-top: 20px; padding: 12px; background: #222; border-radius: 4px; font-family: monospace; font-size: 12px; color: #0f0; }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>🎵 VJ-Gen 音频分析</h1>
+    <p class="subtitle">智能光标交互</p>
+
+    <div class="server-status">
+        <div class="dot offline" id="serverDot"></div>
+        <span id="serverStatus">检查服务器...</span>
+    </div>
+
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+        <div style="font-size:28px;margin-bottom:8px;">☁️</div>
+        <div class="upload-text">上传音频文件</div>
+    </div>
+    <input type="file" id="fileInput" accept="audio/*" style="display:none">
+
+    <div class="results" id="results">
+        <div class="analysis-grid">
+            <div class="analysis-item"><div class="analysis-value" id="bpmValue">--</div><div class="analysis-label">BPM</div></div>
+            <div class="analysis-item"><div class="analysis-value" id="keyValue">--</div><div class="analysis-label">Key</div></div>
+            <div class="analysis-item"><div class="analysis-value" id="energyValue">--</div><div class="analysis-label">Energy</div></div>
+            <div class="analysis-item"><div class="analysis-value" id="sectionsValue">--</div><div class="analysis-label">Sections</div></div>
+            <div class="analysis-item"><div class="analysis-value" id="durationValue">--</div><div class="analysis-label">Duration</div></div>
+            <div class="analysis-item"><div class="analysis-value" id="genreValue">--</div><div class="analysis-label">Genre</div></div>
+        </div>
+
+        <div class="waveform-container" id="waveformContainer">
+            <canvas id="waveform"></canvas>
+            
+            <!-- Section zone - upper 60% -->
+            <div class="section-zone" id="sectionZone"></div>
+            
+            <!-- Play zone - lower 40% -->
+            <div class="play-zone" id="playZone"></div>
+            
+            <div class="selection-box" id="selectionBox"></div>
+            <div class="playhead" id="playhead"></div>
+            <div class="cursor-indicator" id="cursorIndicator"></div>
+        </div>
+
+        <!-- Section popup - outside container for z-index -->
+        <div class="section-popup" id="sectionPopup">
+            <div class="section-popup-title">选择段落类型</div>
+            <button class="section-popup-btn intro" onclick="confirmSection('intro')">🚀 Intro</button>
+            <button class="section-popup-btn verse" onclick="confirmSection('verse')">📝 Verse</button>
+            <button class="section-popup-btn preChorus" onclick="confirmSection('preChorus')">📈 Pre-Chorus</button>
+            <button class="section-popup-btn chorus" onclick="confirmSection('chorus')">🎉 Chorus</button>
+            <button class="section-popup-btn bridge" onclick="confirmSection('bridge')">🌉 Bridge</button>
+            <button class="section-popup-btn outro" onclick="confirmSection('outro')">🏁 Outro</button>
+        </div>
+
+        <div class="beats-timeline" id="beatsTimeline"></div>
+
+        <div class="controls">
+            <button class="play-btn" id="playBtn">▶</button>
+            <div class="time"><span class="current" id="currentTime">0:00</span> / <span id="totalTime">0:00</span></div>
+            <div class="progress-bar" id="seekBar"><div class="progress-fill" id="seekFill"></div></div>
+        </div>
+
+        <div class="section-list" id="sectionList"></div>
+
+        <div class="help">
+            <strong>💡 交互:</strong> 上半区 +号拖动=新建, -号点击=删除 | 下半区 点击=播放
+        </div>
+    </div>
+
+    <div class="status" id="status">Ready</div>
+</div>
+
+<script>
+const SERVER_URL = 'http://localhost:5001';
+const SECTION_TYPES = {
+    intro: {name:'Intro', icon:'🚀', color:'#607D8B'},
+    verse: {name:'Verse', icon:'📝', color:'#2196F3'},
+    preChorus: {name:'Pre-Chorus', icon:'📈', color:'#03A9F4'},
+    chorus: {name:'Chorus', icon:'🎉', color:'#E91E63'},
+    bridge: {name:'Bridge', icon:'🌉', color:'#FF9800'},
+    outro: {name:'Outro', icon:'🏁', color:'#795548'},
+};
+
+let audio, waveformData, sections = [], beats = [], isPlaying = false;
+let isSelecting = false, selectStartX = 0;
+let hoveredSection = null;
+let pendingSelection = null;
+
+const $ = id => document.getElementById(id);
+
+function log(msg) { $('status').textContent = msg; }
+
+async function checkServer() {
+    try {
+        const res = await fetch(`${SERVER_URL}/health`);
+        if (res.ok) {
+            const data = await res.json();
+            $('serverDot').className = 'dot online';
+            $('serverStatus').textContent = `服务器已连接`;
+            return true;
+        }
+    } catch {
+        $('serverDot').className = 'dot offline';
+        $('serverStatus').textContent = '服务器未连接';
+        return false;
+    }
+}
+
+$('fileInput').addEventListener('change', async e => { if (e.target.files[0]) await handleFile(e.target.files[0]); });
+
+async function handleFile(file) {
+    $('uploadZone').classList.add('has-file');
+    $('uploadZone').innerHTML = `<div class="upload-text">${file.name}</div>`;
+    log(`分析中: ${file.name}`);
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await fetch(`${SERVER_URL}/analyze`, { method: 'POST', body: formData });
+
+        if (!response.ok) throw new Error(`Server error: ${response.status}`);
+        const result = await response.json();
+
+        log('✅ 分析完成!');
+        $('bpmValue').textContent = result.bpm;
+        $('keyValue').textContent = result.key;
+        $('energyValue').textContent = result.energy + '%';
+        $('sectionsValue').textContent = result.sections.length;
+        $('durationValue').textContent = formatTime(result.duration);
+        $('genreValue').textContent = result.genre;
+
+        audio = new Audio(URL.createObjectURL(file));
+        audio.addEventListener('loadedmetadata', async () => {
+            $('totalTime').textContent = formatTime(audio.duration);
+            $('results').classList.add('show');
+            
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const buffer = await audioCtx.decodeAudioData(await file.arrayBuffer());
+            waveformData = generateWaveform(buffer);
+            beats = result.beats || [];
+            sections = result.sections.map((s, i) => ({...s, id: i, isNew: false}));
+            
+            renderAll();
+            resizeCanvas();
+            setupEvents();
+        });
+
+        audio.addEventListener('timeupdate', updateProgress);
+        audio.addEventListener('ended', () => { isPlaying = false; $('playBtn').textContent = '▶'; });
+    } catch (error) { log('分析失败: ' + error.message); }
+}
+
+function generateWaveform(buffer) {
+    const raw = buffer.getChannelData(0);
+    const samples = 600, bs = Math.floor(raw.length / samples);
+    const data = [];
+    for (let i = 0; i < samples; i++) {
+        let sum = 0;
+        for (let j = 0; j < bs && i * bs + j < raw.length; j++) sum += Math.abs(raw[i * bs + j]);
+        data.push(sum / bs);
+    }
+    return data.map(d => d / Math.max(...data));
+}
+
+function renderAll() {
+    $('sectionList').innerHTML = '';
+    sections.forEach(s => {
+        const tag = document.createElement('div');
+        tag.className = 'section-tag';
+        tag.style.background = s.color;
+        tag.innerHTML = `${s.icon} ${s.name} <span class="time">${formatTime(s.start)}</span>`;
+        tag.onclick = () => seekTo(s.start / audio.duration);
+        $('sectionList').appendChild(tag);
+    });
+    renderBeats();
+}
+
+function renderBeats() {
+    if (!audio || !beats.length) return;
+    const tl = $('beatsTimeline');
+    tl.innerHTML = '';
+    const dur = audio.duration;
+    beats.forEach((t, i) => {
+        if (t > dur) return;
+        const m = document.createElement('div');
+        m.className = 'beat-marker' + (i % 4 === 0 ? ' downbeat' : '');
+        m.style.left = (t / dur * 100) + '%';
+        tl.appendChild(m);
+    });
+}
+
+function setupEvents() {
+    const container = $('waveformContainer');
+    const sectionZone = $('sectionZone');
+    const playZone = $('playZone');
+    const cursor = $('cursorIndicator');
+    const popup = $('sectionPopup');
+    
+    // Section zone - hover for cursor indicator
+    sectionZone.addEventListener('mousemove', e => {
+        if (!audio) return;
+        const rect = sectionZone.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const p = x / rect.width;
+        const time = p * audio.duration;
+        
+        hoveredSection = findSectionAtTime(time);
+        
+        if (hoveredSection) {
+            cursor.textContent = '−';
+            cursor.style.color = '#ef4444';
+            cursor.className = 'cursor-indicator visible';
+            cursor.style.left = x + 'px';
+            sectionZone.className = 'section-zone has-section';
+        } else {
+            cursor.textContent = '+';
+            cursor.style.color = '#4ade80';
+            cursor.className = 'cursor-indicator visible';
+            cursor.style.left = x + 'px';
+            sectionZone.className = 'section-zone can-add';
+        }
+    });
+    
+    sectionZone.addEventListener('mouseleave', () => {
+        cursor.className = 'cursor-indicator';
+        sectionZone.className = 'section-zone';
+    });
+    
+    // Section zone - click to delete
+    sectionZone.addEventListener('click', e => {
+        if (!audio || isSelecting) return;
+        const rect = sectionZone.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const p = x / rect.width;
+        const time = p * audio.duration;
+        
+        const clicked = findSectionAtTime(time);
+        if (clicked) {
+            deleteSection(clicked.id);
+        }
+    });
+    
+    // Section zone - drag to select
+    sectionZone.addEventListener('mousedown', e => {
+        if (!audio) return;
+        const rect = sectionZone.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const p = x / rect.width;
+        const time = p * audio.duration;
+        
+        if (!findSectionAtTime(time)) {
+            isSelecting = true;
+            selectStartX = x;
+            sectionZone.className = 'section-zone busy';
+            $('selectionBox').style.display = 'block';
+            $('selectionBox').style.left = x + 'px';
+            $('selectionBox').style.width = '0px';
+            popup.classList.remove('show');
+        }
+    });
+    
+    sectionZone.addEventListener('mousemove', e => {
+        if (!isSelecting) return;
+        const rect = sectionZone.getBoundingClientRect();
+        const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+        const left = Math.min(selectStartX, x);
+        const width = Math.abs(x - selectStartX);
+        $('selectionBox').style.left = left + 'px';
+        $('selectionBox').style.width = width + 'px';
+    });
+    
+    sectionZone.addEventListener('mouseup', e => {
+        if (!isSelecting) return;
+        isSelecting = false;
+        $('selectionBox').style.display = 'none';
+        sectionZone.className = 'section-zone';
+        
+        const rect = sectionZone.getBoundingClientRect();
+        const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+        const left = Math.min(selectStartX, x);
+        const right = Math.max(selectStartX, x);
+        const startP = left / rect.width;
+        const endP = right / rect.width;
+        
+        if (endP - startP < 0.01) return;
+        
+        const start = startP * audio.duration;
+        const end = endP * audio.duration;
+        
+        pendingSelection = { start, end };
+        
+        // Show popup below section zone
+        popup.style.left = (e.clientX - 75) + 'px';
+        popup.style.top = (rect.bottom + 10) + 'px';
+        popup.classList.add('show');
+        
+        log(`选择: ${formatTime(start)} - ${formatTime(end)}`);
+    });
+    
+    // Play zone - show play cursor
+    playZone.addEventListener('mouseenter', () => {
+        playZone.style.cursor = 'pointer';
+    });
+    
+    // Play zone - click to seek and play
+    playZone.addEventListener('click', e => {
+        if (!audio) return;
+        const containerRect = container.getBoundingClientRect();
+        const x = e.clientX - containerRect.left;
+        const p = x / containerRect.width;
+        seekTo(p);
+        if (!isPlaying) { audio.play(); isPlaying = true; $('playBtn').textContent = '⏸'; }
+    });
+    
+    // Close popup on outside click
+    document.addEventListener('click', e => {
+        if (!popup.contains(e.target) && !sectionZone.contains(e.target)) {
+            popup.classList.remove('show');
+        }
+    });
+}
+
+function findSectionAtTime(time) {
+    return sections.find(s => time >= s.start && time <= s.end);
+}
+
+function deleteSection(id) {
+    sections = sections.filter(s => s.id !== id);
+    renderAll();
+    log(`Deleted. ${sections.length} sections remain.`);
+}
+
+function confirmSection(type) {
+    if (!pendingSelection) return;
+    
+    const { start, end } = pendingSelection;
+    const info = SECTION_TYPES[type];
+    
+    sections.push({
+        id: Date.now(),
+        start: parseFloat(start.toFixed(2)),
+        end: parseFloat(end.toFixed(2)),
+        type: type,
+        name: info.name,
+        icon: info.icon,
+        color: info.color,
+        isNew: true
+    });
+    
+    sections.sort((a, b) => a.start - b.start);
+    $('sectionPopup').classList.remove('show');
+    pendingSelection = null;
+    
+    renderAll();
+    log(`✅ Added ${info.name}: ${formatTime(start)} - ${formatTime(end)}`);
+}
+
+function togglePlay() {
+    if (!audio) return;
+    isPlaying ? audio.pause() : audio.play();
+    isPlaying = !isPlaying;
+    $('playBtn').textContent = isPlaying ? '⏸' : '▶';
+}
+
+function seekTo(p) {
+    if (audio) { audio.currentTime = p * audio.duration; updateProgress(); }
+}
+
+function updateProgress() {
+    if (!audio || !waveformData) return;
+    const p = audio.currentTime / audio.duration;
+    $('playhead').style.left = (p * 100) + '%';
+    $('seekFill').style.width = (p * 100) + '%';
+    $('currentTime').textContent = formatTime(audio.currentTime);
+    drawWaveform(p);
+}
+
+function drawWaveform(progress = 0) {
+    const canvas = $('waveform');
+    const ctx = canvas.getContext('2d');
+    if (!waveformData) return;
+    
+    const w = canvas.width, h = canvas.height;
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, w, h);
+    const dur = audio ? audio.duration : 1;
+
+    // Section backgrounds
+    sections.forEach(s => {
+        ctx.fillStyle = s.color + '30';
+        ctx.fillRect((s.start / dur) * w, 0, ((s.end - s.start) / dur) * w, h);
+    });
+
+    // Waveform
+    for (let i = 0; i < waveformData.length; i++) {
+        const amp = waveformData[i];
+        const barH = Math.max(2, amp * h * 0.8);
+        const x = i * w / waveformData.length;
+        const y = (h - barH) / 2;
+        const pos = i / waveformData.length;
+
+        let color = '#555';
+        const sec = sections.find(s => pos * dur >= s.start && pos * dur < s.end);
+        if (sec) color = sec.color;
+
+        ctx.fillStyle = pos < progress ? '#ff5500' : color;
+        ctx.fillRect(x, y, Math.max(1, w / waveformData.length - 1), barH);
+    }
+
+    // Section dividers
+    sections.forEach(s => {
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo((s.start / dur) * w, 0);
+        ctx.lineTo((s.start / dur) * w, h);
+        ctx.stroke();
+    });
+}
+
+function formatTime(s) { return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0'); }
+
+function resizeCanvas() {
+    const canvas = $('waveform');
+    const container = $('waveformContainer');
+    canvas.width = container.offsetWidth;
+    canvas.height = container.offsetHeight;
+    if (waveformData) drawWaveform();
+}
+
+window.onresize = () => resizeCanvas();
+
+$('playBtn').onclick = togglePlay;
+$('seekBar').onclick = e => seekTo((e.clientX - $('seekBar').getBoundingClientRect().left) / $('seekBar').offsetWidth);
+
+checkServer();
+</script>
+</body>
+</html>
