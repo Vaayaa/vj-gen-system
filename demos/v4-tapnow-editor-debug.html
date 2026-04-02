@@ -77,6 +77,8 @@
     </style>
 </head>
 <body class="bg-bg-primary text-white h-screen flex flex-col overflow-hidden">
+<script>console.log("[DEBUG] Page loaded");</script>
+
 
     <header class="h-12 bg-bg-panel border-b border-border flex items-center justify-between px-4 flex-shrink-0">
         <div class="flex items-center gap-4">
@@ -648,6 +650,7 @@ function loadAudioFile(file) {
     container.classList.add('waveform-loading');
 
     state.audioElement.addEventListener('loadedmetadata', async () => {
+        console.log("[DEBUG] loadedmetadata fired, duration:", state.audioElement.duration);
         state.duration = state.audioElement.duration;
         updateTimeDisplay();
         updateTimelineRuler();
@@ -712,7 +715,7 @@ async function decodeAudioForWaveform(file) {
         reader.onload = async (e) => {
             try {
                 const arrayBuffer = e.target.result;
-                state.audioBuffer = await state.audioCtx.decodeAudioData(arrayBuffer);
+                console.log("[DEBUG] Decoding audio..."); state.audioBuffer = await state.audioCtx.decodeAudioData(arrayBuffer); console.log("[DEBUG] Audio decoded successfully");
                 
                 // Get waveform data from audio buffer
                 const rawData = state.audioBuffer.getChannelData(0);
@@ -760,7 +763,7 @@ function processWaveformData(rawData, targetPoints) {
     }));
 }
 
-function drawWaveformFallback() {
+function drawWaveformFallback() { console.log("[DEBUG] drawWaveformFallback called"); {
     if (!state.duration) return;
     
     const canvas = $('waveform-canvas');
@@ -768,7 +771,7 @@ function drawWaveformFallback() {
     canvas.width = container.offsetWidth;
     canvas.height = container.offsetHeight;
     
-    const ctx = canvas.getContext('2d');
+    console.log("[DEBUG] Canvas size:", canvas.width, "x", canvas.height); const ctx = canvas.getContext('2d');
     const w = canvas.width;
     const h = canvas.height;
     
@@ -1115,7 +1118,7 @@ function showToast(message, type = 'info') {
 // ============================================================
 // Waveform Drawing
 // ============================================================
-async function drawWaveform() {
+async function drawWaveform() { console.log("[DEBUG] drawWaveform called"); {
     if (!state.audioElement || !state.duration) return;
     
     const canvas = $('waveform-canvas');
@@ -1123,7 +1126,7 @@ async function drawWaveform() {
     canvas.width = container.offsetWidth;
     canvas.height = container.offsetHeight;
     
-    const ctx = canvas.getContext('2d');
+    console.log("[DEBUG] Canvas size:", canvas.width, "x", canvas.height); const ctx = canvas.getContext('2d');
     const w = canvas.width;
     const h = canvas.height;
     
@@ -2087,7 +2090,7 @@ function handleRefVideoUpload(file) {
         const canvas = document.createElement('canvas');
         canvas.width = 160;
         canvas.height = 90;
-        const ctx = canvas.getContext('2d');
+        console.log("[DEBUG] Canvas size:", canvas.width, "x", canvas.height); const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const thumbnail = canvas.toDataURL('image/jpeg', 0.7);
         

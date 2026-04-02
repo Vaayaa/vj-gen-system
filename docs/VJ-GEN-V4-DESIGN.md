@@ -1,4 +1,5 @@
 # VJ-Gen V4 设计方案
+
 **基于 TapNow 风格的专业 NLE 编辑器**
 
 ---
@@ -8,6 +9,7 @@
 **类比**：TapNow NLE编辑器 × 节点式工作流（节点线 Workflow）
 
 **核心布局**：
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  顶部工具栏 (Project Name | Undo/Redo | Zoom | Export)          │
@@ -26,6 +28,7 @@
 ```
 
 **配色方案**（暗色主题）：
+
 | 用途 | 颜色 |
 |------|------|
 | 背景主色 | `#0D0D0F` |
@@ -133,6 +136,7 @@
 **Tab切换**: `[时间线] [节点流程] [批量生成]`
 
 #### 时间线视图
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ [+] [📐16:9] [🎵音频]  │ 🔍 过滤: [全部▼]  │  ▶ 00:05:32 / 00:03:45  │ ⚙️ │
@@ -141,7 +145,7 @@
 ├────────────┼────────────────────────────────────────────────────────────────┤
 │ 🎵 音频    │ ████████████████████████████████ (完整波形)                    │
 ├────────────┼────────────────────────────────────────────────────────────────┤
-│ 📺 主视频  │ ▓▓▓▓▓▓▓▓ │ ░░░░░░░ │ ▓▓▓▓▓▓▓▓▓▓ │ ░░░ │ ▓▓▓▓▓▓▓▓ │           │
+│ 📺 主视频  │ ▓▓▓▓▓▓▓▓ │ ░░░░░░░ │ ▓▓▓▓▓▓▓▓▓▓ │ ░░░░ │ ▓▓▓▓▓▓▓▓ │           │
 │            │  kf_001  │ kf_002  │   kf_003    │     │  kf_004 │           │
 ├────────────┼────────────────────────────────────────────────────────────────┤
 │ 🎨 叠加层  │    ▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒    │  ▒▒▒▒▒ │                         │
@@ -152,6 +156,7 @@
 ```
 
 #### 节点流程视图（参考TapNow）
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  [节点流程图 - 可拖拽连线]                                                    │
@@ -192,7 +197,7 @@
 ### 节点连接规则
 
 ```
-[🎵音频] → [📊分析] → [📝歌词] → [✏️Prompt] → [🖼️生成] → [⏱️编排] → [🎬视频] → [📺输出]
+[🎵音频] → [📊分析] → [📝歌词] → [✨Prompt] → [🖼️生成] → [⏱️编排] → [🎬视频] → [📺输出]
                                       ↑
                                [🎨风格]─┘
 ```
@@ -202,11 +207,13 @@
 ## 四、核心操作流程
 
 ### 4.1 自动模式（一键生成）
+
 1. 导入音频文件
 2. 系统自动完成：BPM检测 → 歌词分析 → Prompt生成 → 静帧生成 → 时间编排 → 视频生成
 3. 预览 → 调整 → 导出
 
 ### 4.2 手动模式（精细控制）
+
 1. 音频 → 分段标记
 2. 每段手动写Prompt或调整AI生成
 3. 选择风格预设
@@ -220,6 +227,7 @@
 ## 五、技术实现
 
 ### 5.1 前端技术栈
+
 - **框架**: Next.js 14 + React 18
 - **样式**: Tailwind CSS + CSS Variables
 - **画布**: 自研 Canvas 或 Fabric.js
@@ -227,16 +235,119 @@
 - **拖拽**: @dnd-kit / react-dnd
 
 ### 5.2 节点流程实现
+
 - **节点库**: 自研或复用 xyflow/react-flow
 - **画布**: 支持缩放、平移、网格吸附
 
 ### 5.3 通信协议
+
 - **WebSocket**: 实时预览、进度推送
 - **REST API**: 常规CRUD操作
 
 ---
 
-## 六、交付计划
+## 六、实现细节（Phase 1-8 补充）
+
+### 6.1 数据模型映射
+
+| Pydantic Model | 用途 | 关键字段 |
+|----------------|------|----------|
+| `Project` | 项目根对象 | id, status, audio_path, shot_script |
+| `AudioAnalysisResult` | 音频分析结果 | bpm, beats, sections, energy_curve |
+| `LyricAnalysis` | 歌词分析结果 | lines, overall_mood, themes |
+| `ShotScript` | 镜头脚本 | items[], total_duration, resolution |
+| `ShotScriptItem` | 单个镜头 | time_start/end, visual_prompt, camera_behavior |
+| `VJTimeline` | 时间线 | clips[], audio_path, fade_in/out |
+| `VJClip` | 视频片段 | id, keyframe_path, video_path, metadata |
+| `RenderProfile` | 渲染配置 | width, height, fps, codec, crf |
+
+### 6.2 适配器接口设计
+
+```python
+# src/adapters/base.py
+class BaseAdapter(ABC):
+    async def generate(self, **kwargs) -> Any:
+        """主生成方法（子类实现）"""
+        pass
+    
+    async def validate_config(self) -> bool:
+        """验证配置是否有效"""
+        pass
+
+# src/adapters/audio/librosa_adapter.py
+class LibrosaAudioAdapter(BaseAdapter):
+    async def analyze_beats(self, audio_path: str) -> list[BeatInfo]:
+        """使用 librosa 检测节拍"""
+        
+    async def analyze_sections(self, audio_path: str) -> list[AudioSection]:
+        """使用 librosa 分析段落结构"""
+        
+    async def separate_vocals(self, audio_path: str) -> tuple[str, str]:
+        """使用 demucs 分离人声/伴奏"""
+```
+
+### 6.3 管线编排
+
+```python
+# src/pipelines/audio_pipeline.py
+class AudioPipeline:
+    def __init__(self, audio_adapter, vocal_separator):
+        self.audio_adapter = audio_adapter
+        self.vocal_separator = vocal_separator
+    
+    async def analyze(self, audio_path: str) -> AudioAnalysisResult:
+        # 1. 加载音频
+        # 2. BPM + 节拍检测
+        # 3. 段落结构分析
+        # 4. 能量曲线提取
+        # 5. 人声分离（可选）
+        # 6. 组装结果
+```
+
+### 6.4 任务队列设计（Celery）
+
+```python
+# worker/tasks.py
+@celery_app.task(bind=True, max_retries=3)
+def analyze_audio(self, project_id: str, audio_path: str):
+    try:
+        result = audio_pipeline.analyze(audio_path)
+        update_project(project_id, audio_analysis=result)
+    except Exception as e:
+        self.retry(exc=e, countdown=60)
+
+@celery_app.task(bind=True, max_retries=3)
+def generate_keyframes(self, project_id: str, shot_script: ShotScript):
+    for item in shot_script.items:
+        keyframe = image_pipeline.generate(item)
+        save_keyframe(project_id, item.id, keyframe)
+```
+
+### 6.5 时间线渲染（ffmpeg）
+
+```python
+# 使用 ffmpeg-python 封装
+def compile_timeline(timeline: VJTimeline, profile: RenderProfile) -> str:
+    # 1. 准备输入文件列表
+    # 2. 构建 filter_complex
+    # 3. 处理转场（xfade）
+    # 4. 合成音频
+    # 5. 编码输出
+    cmd = f"""
+    ffmpeg -y
+        -i "{timeline.audio_path}"
+        {input_args}
+        -filter_complex "{filter_complex}"
+        -map "[outv]" -map "0:a"
+        -c:v {profile.codec} -crf {profile.crf}
+        -c:a {profile.audio_codec} -b:a {profile.audio_bitrate}
+        "{output_path}"
+    """
+```
+
+---
+
+## 七、交付计划
 
 | 版本 | 内容 | 优先级 |
 |------|------|--------|
@@ -249,4 +360,21 @@
 
 ---
 
-*设计版本: V4 | 基于TapNow风格 | 2026-04-02*
+## 八、UI 组件清单
+
+| 组件名 | 说明 | 状态 |
+|--------|------|------|
+| `TopToolbar` | 顶部工具栏 | 待开发 |
+| `MediaLibrary` | 左侧素材库面板 | 待开发 |
+| `PreviewCanvas` | 中央视频预览区 | 待开发 |
+| `PropertyPanel` | 右侧属性/AI配置面板 | 待开发 |
+| `Timeline` | 底部时间线 | 待开发 |
+| `NodeFlow` | 节点流程图 | 待开发 |
+| `WaveformDisplay` | 音频波形+节拍可视化 | 待开发 |
+| `AspectRatioSwitcher` | 画幅切换器 | 待开发 |
+| `StylePresets` | 风格预设选择器 | 待开发 |
+| `ProgressOverlay` | 生成进度遮罩 | 待开发 |
+
+---
+
+*设计版本: V4 | 基于TapNow风格 | 2026-04-02 | 最后更新: 2026-04-02*

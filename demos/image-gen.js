@@ -11,15 +11,6 @@ class MiniMaxImageAPI {
         this.baseURL = (options.baseURL || 'https://api.minimax.chat/v1').replace(/\/$/, '');
     }
 
-    static aspectToResolution(aspectRatio) {
-        const map = {
-            '1:1': '1024x1024',
-            '16:9': '1280x720',
-            '9:16': '720x1280',
-        };
-        return map[aspectRatio] || '1024x1024';
-    }
-
     /**
      * @param {object} params
      * @param {string} params.prompt
@@ -43,14 +34,12 @@ class MiniMaxImageAPI {
         }
 
         const url = `${this.baseURL}/image_generation`;
-        const resolution = MiniMaxImageAPI.aspectToResolution(aspect_ratio);
         const n = Math.min(Math.max(Number(num_images) || 1, 1), 4);
 
         const payload = {
             model,
             prompt: String(prompt).trim(),
-            resolution,
-            response_format: 'url',
+            aspect_ratio,
         };
         if (negative_prompt) payload.negative_prompt = negative_prompt;
         if (n > 1) payload.num_images = n;

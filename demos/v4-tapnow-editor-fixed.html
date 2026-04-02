@@ -648,7 +648,10 @@ function loadAudioFile(file) {
     container.classList.add('waveform-loading');
 
     state.audioElement.addEventListener('loadedmetadata', async () => {
+        console.log('[VJ-Gen] Audio metadata loaded, duration:', state.audioElement.duration);
         state.duration = state.audioElement.duration;
+        $('audio-name').textContent = state.audioFile ? state.audioFile.name : '已加载音频';
+        showToast('音频已加载，时长: ' + state.duration.toFixed(1) + '秒', 'success');
         updateTimeDisplay();
         updateTimelineRuler();
         applyVolumeFromControls();
@@ -660,10 +663,16 @@ function loadAudioFile(file) {
             showToast('音频加载完成', 'success');
         } catch (err) {
             console.warn('[VJ-Gen] Web Audio decode failed, using fallback:', err);
-            drawWaveformFallback();
+            // Still generate fake waveform data so analysis can work
+            if (state.duration > 0) {
+                drawWaveformFallback();
+            }
         }
         
         container.classList.remove('waveform-loading');
+        // Ensure waveform section is visible
+        const waveformSection = $('waveform-section');
+        if (waveformSection) waveformSection.classList.remove('hidden');
         console.log('[VJ-Gen] Audio loaded:', state.duration.toFixed(2) + 's');
         $('project-duration').textContent = formatTime(state.duration);
         
