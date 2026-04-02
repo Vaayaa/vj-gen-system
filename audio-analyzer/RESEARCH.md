@@ -321,3 +321,37 @@ python3 server.py
 ### 文件
 - `full_compare.py` - 三方法对比脚本
 - `ANALYSIS_SUMMARY.md` - 分析总结
+
+---
+
+## 十一、深夜更新 (2026-04-02 23:xx)
+
+### 新增功能
+
+**1. 基于节拍的段落检测**
+- 文件: `section_detector.py`
+- 使用librosa beat tracking
+- 测试结果: 99.4 BPM, 3个段落
+  - Intro: 0-19s
+  - Chorus: 19-38s  
+  - Outro: 38-39s
+
+**2. VJ编辑器集成模块**
+- 文件: `editor-integration.js`
+- VJAudioAnalyzer: 音频分析
+- VJMaterialGenerator: 素材生成
+- VJEditorIntegration: 编辑器集成
+
+**3. 改进行为**
+- 从MFCC/能量分析改为节拍跟踪
+- 更稳定的段落边界检测
+
+### Omnizart状态
+- 仍然失败 (依赖问题)
+- 记录待后续解决
+
+### 待办
+1. ✅ 段落检测算法 - 已完成基础版
+2. ⏳ omnizart - 依赖问题
+3. ✅ VJ集成 - 已创建模块
+4. ⏳ 更好的段落合并逻辑
