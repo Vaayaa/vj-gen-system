@@ -3,26 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VJ-Gen V4 - NLE编辑器</title>
+    <title>VJ-Gen V4.5 - AI音视频编辑器</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="./miniMax-image-gen.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
-                        bg: {
-                            primary: '#0D0D0F',
-                            panel: '#141418',
-                            card: '#1C1C22',
-                        },
+                        bg: { primary: '#0D0D0F', panel: '#141418', card: '#1C1C22' },
                         border: '#2A2A32',
-                        accent: {
-                            DEFAULT: '#6366F1',
-                            hover: '#818CF8',
-                            success: '#10B981',
-                            warning: '#F59E0B',
-                        }
+                        accent: { DEFAULT: '#6366F1', hover: '#818CF8', success: '#10B981', warning: '#F59E0B' }
                     }
                 }
             }
@@ -31,614 +23,1259 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Inter', system-ui, sans-serif; }
-        
-        /* Scrollbar */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #3A3A44; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #4A4A54; }
-        
-        /* Panel resize handle */
-        .resize-handle {
-            width: 4px;
-            cursor: col-resize;
-            background: transparent;
-            transition: background 0.2s;
-        }
-        .resize-handle:hover { background: #6366F1; }
-        
-        /* Timeline track */
-        .timeline-track {
-            background: repeating-linear-gradient(
-                90deg,
-                transparent,
-                transparent 49px,
-                #2A2A32 49px,
-                #2A2A32 50px
-            );
-        }
-        
-        /* Node flow */
-        .node {
-            background: #1C1C22;
-            border: 1px solid #2A2A32;
-            border-radius: 8px;
-            min-width: 120px;
-        }
-        .node:hover { border-color: #6366F1; }
-        .node.selected { border-color: #6366F1; box-shadow: 0 0 0 2px rgba(99,102,241,0.3); }
-        
-        /* Tab active */
-        .tab-btn.active {
-            background: #6366F1;
-            color: white;
-        }
-        
-        /* Clip block */
+        .tab-btn.active { background: #6366F1; color: white; }
         .clip-block {
             background: linear-gradient(135deg, #6366F1, #8B5CF6);
-            border-radius: 4px;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            color: white;
-            cursor: pointer;
-            transition: all 0.2s;
+            border-radius: 4px; height: 100%; display: flex; align-items: center;
+            justify-content: center; font-size: 11px; color: white; cursor: pointer; transition: all 0.2s;
         }
         .clip-block:hover { transform: scale(1.02); box-shadow: 0 4px 12px rgba(99,102,241,0.4); }
-        
-        /* Waveform */
-        .waveform {
-            background: linear-gradient(to bottom, #6366F1 0%, #6366F1 50%, transparent 50%);
-            background-size: 100% 4px;
-            opacity: 0.7;
-        }
-        
-        /* Playhead */
         .playhead {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 2px;
-            background: #10B981;
-            z-index: 10;
-            cursor: ew-resize;
+            position: absolute; top: 0; bottom: 0; width: 2px; background: #10B981; z-index: 10; cursor: ew-resize;
         }
         .playhead::before {
-            content: '▼';
-            position: absolute;
-            top: -8px;
-            left: -6px;
-            color: #10B981;
-            font-size: 10px;
+            content: '▼'; position: absolute; top: -8px; left: -6px; color: #10B981; font-size: 10px;
         }
+        .timeline-track {
+            background: repeating-linear-gradient(90deg, transparent, transparent 49px, #2A2A32 49px, #2A2A32 50px);
+        }
+        .node { background: #1C1C22; border: 1px solid #2A2A32; border-radius: 8px; min-width: 120px; }
+        .node:hover { border-color: #6366F1; }
+        .drag-over { border-color: #6366F1 !important; background: rgba(99,102,241,0.1) !important; }
+        .bpm-display {
+            font-family: 'Courier New', monospace; font-size: 1.8rem; font-weight: bold;
+            background: linear-gradient(135deg, #6366F1, #8B5CF6);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 5px rgba(99,102,241,0.5); }
+            50% { box-shadow: 0 0 20px rgba(99,102,241,0.8); }
+        }
+        .generating { animation: pulse-glow 1.5s ease-in-out infinite; }
+        .beat-marker { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(99,102,241,0.3); }
+        .beat-marker.downbeat { background: rgba(99,102,241,0.7); width: 2px; }
+        .timeline-playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #10B981; z-index: 10; }
+        .lyric-item {
+            position: absolute; top: 50%; transform: translateY(-50%);
+            padding: 2px 8px; border-radius: 4px; font-size: 11px; white-space: nowrap;
+        }
+        .gen-progress { transition: width 0.3s ease; }
+        .gen-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .style-preset.selected { ring: 2px; ring-color: #6366F1; }
+        .lyric-item.lyric-active {
+            background: rgba(99,102,241,0.45) !important;
+            border-color: #818CF8 !important;
+            box-shadow: 0 0 12px rgba(99,102,241,0.35);
+            z-index: 2;
+        }
+        input[type="range"].seek-bar { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: #2A2A32; }
+        input[type="range"].seek-bar::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #6366F1; cursor: pointer; }
     </style>
 </head>
 <body class="bg-bg-primary text-white h-screen flex flex-col overflow-hidden">
-    
-    <!-- Top Toolbar -->
+
     <header class="h-12 bg-bg-panel border-b border-border flex items-center justify-between px-4 flex-shrink-0">
         <div class="flex items-center gap-4">
-            <div class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center font-bold text-sm">
-                V
-            </div>
-            <span class="font-medium">VJ-Gen</span>
+            <div class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center font-bold text-xs">V4.5</div>
+            <span class="font-medium">VJ-Gen AI编辑器</span>
             <span class="text-border">|</span>
-            <input type="text" value="赛博都市概念_v2" 
-                   class="bg-transparent text-sm outline-none border-b border-transparent hover:border-border focus:border-accent">
+            <input type="text" id="project-name" value="未命名项目" class="bg-transparent text-sm outline-none border-b border-transparent hover:border-border focus:border-accent w-48">
         </div>
-        
         <div class="flex items-center gap-2">
             <button class="w-8 h-8 rounded-lg hover:bg-bg-card flex items-center justify-center" title="撤销">↩️</button>
             <button class="w-8 h-8 rounded-lg hover:bg-bg-card flex items-center justify-center" title="重做">↪️</button>
             <span class="text-border mx-2">|</span>
-            <button class="w-8 h-8 rounded-lg hover:bg-bg-card flex items-center justify-center" title="缩放">🔍</button>
-            <select class="bg-bg-card border border-border rounded-lg px-2 py-1 text-sm">
-                <option>100%</option>
-                <option>75%</option>
-                <option>50%</option>
+            <button id="btn-zoom-out" class="w-8 h-8 rounded-lg hover:bg-bg-card flex items-center justify-center" title="缩小">➖</button>
+            <button id="btn-zoom-in" class="w-8 h-8 rounded-lg hover:bg-bg-card flex items-center justify-center" title="放大">➕</button>
+            <select id="zoom-select" class="bg-bg-card border border-border rounded-lg px-2 py-1 text-sm">
+                <option value="50">50%</option><option value="75">75%</option><option value="100" selected>100%</option>
+                <option value="150">150%</option><option value="200">200%</option>
             </select>
             <span class="text-border mx-2">|</span>
-            <button class="px-4 py-1.5 bg-accent hover:bg-accent-hover rounded-lg text-sm font-medium transition-colors">
-                导出
-            </button>
+            <button id="btn-export" class="px-4 py-1.5 bg-accent hover:bg-accent-hover rounded-lg text-sm font-medium transition-colors">导出</button>
         </div>
     </header>
-    
-    <!-- Main Content -->
+
     <div class="flex-1 flex overflow-hidden">
-        
-        <!-- Left Panel - Material Library -->
         <aside class="w-52 bg-bg-panel border-r border-border flex flex-col flex-shrink-0">
             <div class="p-3 border-b border-border flex items-center justify-between">
                 <span class="text-sm font-medium">📁 素材库</span>
                 <div class="flex gap-1">
-                    <button class="w-6 h-6 rounded hover:bg-bg-card flex items-center justify-center text-xs" title="导入">📥</button>
+                    <button id="btn-import" class="w-6 h-6 rounded hover:bg-bg-card flex items-center justify-center text-xs" title="导入">📥</button>
                     <button class="w-6 h-6 rounded hover:bg-bg-card flex items-center justify-center text-xs" title="新建文件夹">📂</button>
                 </div>
             </div>
-            
-            <!-- Search -->
             <div class="p-2">
-                <input type="text" placeholder="🔍 搜索..." 
-                       class="w-full bg-bg-card border border-border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent">
+                <input type="text" placeholder="🔍 搜索..." class="w-full bg-bg-card border border-border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent">
             </div>
-            
-            <!-- Material List -->
             <div class="flex-1 overflow-y-auto p-2 space-y-1">
-                <!-- Audio Files -->
-                <div class="text-xs text-gray-500 px-2 py-1">🎵 音频文件</div>
-                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-card cursor-pointer text-sm">
-                    <span>▶️</span>
-                    <span class="flex-1 truncate">demo_cyberpunk.mp3</span>
-                    <span class="text-xs text-gray-500">3:45</span>
+                <div id="audio-upload-zone" class="border-2 border-dashed border-border rounded-lg p-3 text-center cursor-pointer hover:border-accent transition-colors">
+                    <div class="text-2xl mb-1">🎵</div>
+                    <div class="text-xs text-gray-400">点击上传音频</div>
+                    <div class="text-xs text-gray-500 mt-1">MP3, WAV, FLAC</div>
+                    <input type="file" id="audio-file-input" accept="audio/*" class="hidden">
                 </div>
-                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-card cursor-pointer text-sm">
-                    <span>📄</span>
-                    <span class="flex-1 truncate">歌词.lrc</span>
-                </div>
-                
-                <!-- AI Generated -->
+                <div id="audio-files-list" class="space-y-1 mt-2"></div>
                 <div class="text-xs text-gray-500 px-2 py-1 mt-3">✨ AI生成</div>
-                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-card cursor-pointer text-sm bg-accent/10 border border-accent/30">
-                    <span>🖼️</span>
-                    <span class="flex-1 truncate">kf_赛博都市_001</span>
-                </div>
-                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-card cursor-pointer text-sm">
-                    <span>🖼️</span>
-                    <span class="flex-1 truncate">kf_霓虹_002</span>
-                </div>
-                <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-card cursor-pointer text-sm">
-                    <span>🎬</span>
-                    <span class="flex-1 truncate">vid_脉冲_01</span>
-                </div>
-                
-                <!-- Style Presets -->
+                <div id="ai-generated-list" class="space-y-1"></div>
                 <div class="text-xs text-gray-500 px-2 py-1 mt-3">🎨 风格预设</div>
                 <div class="grid grid-cols-2 gap-1">
-                    <div class="aspect-video rounded bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center text-xs cursor-pointer hover:ring-2 ring-accent">赛博</div>
-                    <div class="aspect-video rounded bg-gradient-to-br from-pink-900 to-purple-900 flex items-center justify-center text-xs cursor-pointer hover:ring-2 ring-accent">梦幻</div>
-                    <div class="aspect-video rounded bg-gradient-to-br from-orange-900 to-red-900 flex items-center justify-center text-xs cursor-pointer hover:ring-2 ring-accent">火焰</div>
-                    <div class="aspect-video rounded bg-gradient-to-br from-cyan-900 to-blue-900 flex items-center justify-center text-xs cursor-pointer hover:ring-2 ring-accent">极简</div>
+                    <div class="style-preset aspect-video rounded bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center text-xs cursor-pointer hover:ring-2 ring-accent" data-style="cyberpunk">赛博</div>
+                    <div class="style-preset aspect-video rounded bg-gradient-to-br from-pink-900 to-purple-900 flex items-center justify-center text-xs cursor-pointer hover:ring-2 ring-accent" data-style="fantasy">梦幻</div>
+                    <div class="style-preset aspect-video rounded bg-gradient-to-br from-orange-900 to-red-900 flex items-center justify-center text-xs cursor-pointer hover:ring-2 ring-accent" data-style="fire">火焰</div>
+                    <div class="style-preset aspect-video rounded bg-gradient-to-br from-cyan-900 to-blue-900 flex items-center justify-center text-xs cursor-pointer hover:ring-2 ring-accent" data-style="minimal">极简</div>
                 </div>
             </div>
         </aside>
-        
-        <!-- Center - Preview Area -->
+
         <main class="flex-1 flex flex-col bg-bg-primary min-w-0">
-            
-            <!-- Preview Canvas -->
             <div class="flex-1 p-4 flex flex-col min-h-0">
-                <div class="flex-1 bg-bg-card rounded-xl border border-border flex items-center justify-center relative overflow-hidden">
-                    <!-- Preview Content -->
-                    <div class="absolute inset-0 flex items-center justify-center">
+                <div id="preview-container" class="flex-1 bg-bg-card rounded-xl border border-border flex items-center justify-center relative overflow-hidden">
+                    <div id="preview-empty" class="text-center">
+                        <div class="w-64 h-36 bg-bg-primary rounded-lg mb-4 flex items-center justify-center">
+                            <span class="text-4xl opacity-50">🎬</span>
+                        </div>
+                        <div class="text-sm text-gray-400">上传音频开始创作</div>
+                    </div>
+                    <div id="preview-content" class="absolute inset-0 hidden">
+                        <img id="preview-image" src="" alt="Preview" class="w-full h-full object-contain">
+                    </div>
+                    <div id="preview-loading" class="absolute inset-0 hidden flex items-center justify-center bg-bg-primary/80">
                         <div class="text-center">
-                            <div class="w-64 h-36 bg-gradient-to-br from-blue-900 via-purple-900 to-pink-900 rounded-lg mb-4 flex items-center justify-center">
-                                <span class="text-4xl">🌃</span>
-                            </div>
-                            <div class="text-sm text-gray-400">预览区域</div>
+                            <div class="w-16 h-16 border-4 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                            <div class="text-sm text-gray-400">AI生成中...</div>
+                            <div id="gen-progress-text" class="text-xs text-gray-500 mt-1">0%</div>
                         </div>
                     </div>
-                    
-                    <!-- Playback Controls -->
-                    <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/60 backdrop-blur px-4 py-2 rounded-full">
-                        <button class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center">⏮️</button>
-                        <button class="w-10 h-10 rounded-full bg-accent hover:bg-accent-hover flex items-center justify-center text-lg">▶️</button>
-                        <button class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center">⏭️</button>
-                        <span class="text-sm font-mono ml-2">00:01:32 / 00:03:45</span>
+                    <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-wrap items-center justify-center gap-2 sm:gap-4 bg-black/60 backdrop-blur px-3 sm:px-4 py-2 rounded-full max-w-[95%]">
+                        <button id="btn-prev" type="button" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-sm" title="回到开头">⏮️</button>
+                        <button id="btn-skip-back" type="button" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-mono" title="后退 5 秒">-5s</button>
+                        <button id="btn-play" type="button" class="w-10 h-10 rounded-full bg-accent hover:bg-accent-hover flex items-center justify-center text-lg" title="播放/暂停 (空格)">▶️</button>
+                        <button id="btn-skip-fwd" type="button" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-mono" title="前进 5 秒">+5s</button>
+                        <button id="btn-next" type="button" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-sm" title="跳到接近结尾">⏭️</button>
+                        <span id="time-display" class="text-sm font-mono ml-1">00:00 / 00:00</span>
+                        <label class="hidden sm:flex items-center gap-1 text-xs text-gray-300 ml-1" title="音量"><span>🔈</span>
+                            <input id="volume-bar" type="range" min="0" max="100" value="100" class="w-20 accent-accent">
+                        </label>
+                        <button id="btn-ai-gen-quick" type="button" class="px-3 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-xs font-medium shadow-lg shadow-indigo-500/20" title="打开右侧 AI 生图">✨ AI生图</button>
                     </div>
                 </div>
-                
-                <!-- Audio Waveform -->
-                <div class="h-16 bg-bg-panel rounded-lg border border-border mt-3 px-2 flex items-center overflow-hidden relative">
-                    <div class="waveform flex-1 h-full" style="width: 200%;"></div>
-                    <div class="playhead" style="left: 25%;"></div>
+
+                <div id="waveform-section" class="bg-bg-panel rounded-lg border border-border mt-3 overflow-hidden">
+                    <div class="flex items-center justify-between px-3 py-2 border-b border-border">
+                        <div class="flex items-center gap-3">
+                            <button id="btn-analyze" class="px-3 py-1 bg-accent hover:bg-accent-hover rounded text-xs font-medium transition-colors">📊 分析BPM</button>
+                            <div id="bpm-display" class="hidden">
+                                <span class="text-xs text-gray-400">BPM:</span>
+                                <span id="bpm-value" class="bpm-display ml-1">128</span>
+                            </div>
+                            <div id="beat-info" class="hidden text-xs text-gray-400">
+                                <span>节拍: </span><span id="beat-count">0</span>
+                                <span class="ml-2">段落: </span><span id="section-count">0</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span id="audio-name" class="text-xs text-gray-400">未加载音频</span>
+                            <button id="btn-audio-delete" class="w-6 h-6 rounded hover:bg-bg-card hidden" title="删除音频">🗑️</button>
+                        </div>
+                    </div>
+                    <div id="waveform-container" class="h-20 relative cursor-pointer">
+                        <canvas id="waveform-canvas"></canvas>
+                        <div id="waveform-playhead" class="playhead" style="left: 0%;"></div>
+                        <div id="beat-markers" class="absolute inset-0 pointer-events-none"></div>
+                    </div>
+                    <div class="flex items-center gap-3 px-3 py-2 border-t border-border bg-bg-primary/50">
+                        <span class="text-xs text-gray-500 whitespace-nowrap">进度</span>
+                        <input id="seek-bar" type="range" class="flex-1 seek-bar min-w-0" min="0" max="1000" value="0" title="拖拽跳转">
+                        <span class="text-xs text-gray-500 sm:hidden">🔈</span>
+                        <input id="volume-bar-mobile" type="range" class="w-16 sm:hidden accent-accent" min="0" max="100" value="100" title="音量">
+                    </div>
                 </div>
-                
-                <!-- Aspect Ratio Toggle -->
+
+                <div id="lyrics-timeline" class="bg-bg-panel rounded-lg border border-border mt-2 overflow-hidden hidden">
+                    <div class="flex items-center justify-between px-3 py-2 border-b border-border">
+                        <span class="text-xs text-gray-400">📝 歌词时间轴</span>
+                        <div class="flex gap-2 items-center">
+                            <button id="btn-demo-lrc" type="button" class="text-xs px-2 py-1 rounded hover:bg-bg-card border border-transparent hover:border-border" title="填入示例 LRC">示例歌词</button>
+                            <button id="btn-load-lyrics" type="button" class="text-xs px-2 py-1 rounded hover:bg-bg-card">加载 LRC</button>
+                            <input type="file" id="lyrics-file-input" accept=".lrc,.txt" class="hidden">
+                        </div>
+                    </div>
+                    <div id="lyric-current-line" class="px-3 py-2 text-sm text-indigo-200 border-b border-border min-h-[2.5rem] flex items-center bg-bg-primary/40">
+                        <span class="text-gray-500 text-xs mr-2">当前</span>
+                        <span id="lyric-current-text" class="flex-1 truncate">—</span>
+                    </div>
+                    <div id="lyrics-container" class="h-16 relative overflow-x-auto overflow-y-hidden"></div>
+                </div>
+
                 <div class="flex items-center justify-center gap-4 mt-3 text-sm text-gray-400">
-                    <button class="px-3 py-1 rounded bg-accent text-white">🖥️ 16:9</button>
-                    <button class="px-3 py-1 rounded hover:bg-bg-card">9:16</button>
-                    <button class="px-3 py-1 rounded hover:bg-bg-card">1:1</button>
+                    <button class="aspect-btn px-3 py-1 rounded bg-accent text-white" data-aspect="16:9">🖥️ 16:9</button>
+                    <button class="aspect-btn px-3 py-1 rounded hover:bg-bg-card" data-aspect="9:16">9:16</button>
+                    <button class="aspect-btn px-3 py-1 rounded hover:bg-bg-card" data-aspect="1:1">1:1</button>
                     <span class="mx-2">|</span>
-                    <button class="px-3 py-1 rounded hover:bg-bg-card">🔲 全屏</button>
-                    <button class="px-3 py-1 rounded hover:bg-bg-card">📐 参考线</button>
+                    <button id="btn-fullscreen" class="px-3 py-1 rounded hover:bg-bg-card">🔲 全屏</button>
+                    <button id="btn-guides" class="px-3 py-1 rounded hover:bg-bg-card">📐 参考线</button>
                 </div>
             </div>
         </main>
-        
-        <!-- Right Panel - Properties/AI Config -->
+
         <aside class="w-72 bg-bg-panel border-l border-border flex flex-col flex-shrink-0">
-            
-            <!-- Tabs -->
             <div class="flex border-b border-border p-2 gap-1">
-                <button class="tab-btn active flex-1 py-1.5 rounded text-xs font-medium">属性</button>
-                <button class="tab-btn flex-1 py-1.5 rounded text-xs font-medium text-gray-400 hover:bg-bg-card">AI生成</button>
-                <button class="tab-btn flex-1 py-1.5 rounded text-xs font-medium text-gray-400 hover:bg-bg-card">节点</button>
+                <button class="tab-btn active flex-1 py-1.5 rounded text-xs font-medium" data-tab="props">属性</button>
+                <button class="tab-btn flex-1 py-1.5 rounded text-xs font-medium text-gray-400 hover:bg-bg-card" data-tab="ai">AI生成</button>
+                <button class="tab-btn flex-1 py-1.5 rounded text-xs font-medium text-gray-400 hover:bg-bg-card" data-tab="nodes">节点</button>
             </div>
-            
-            <!-- Properties Panel -->
-            <div class="flex-1 overflow-y-auto p-3 space-y-4">
-                
-                <!-- Current Clip -->
+
+            <div id="props-panel" class="flex-1 overflow-y-auto p-3 space-y-4">
                 <div class="bg-bg-card rounded-lg p-3 border border-border">
                     <div class="flex items-center justify-between mb-2">
                         <span class="text-sm font-medium">📊 当前片段</span>
-                        <span class="text-xs text-accent">kf_赛博都市_001</span>
+                        <span id="current-clip-name" class="text-xs text-accent">无片段</span>
                     </div>
                     <div class="grid grid-cols-2 gap-2 text-xs">
-                        <div class="bg-bg-primary rounded p-2">
-                            <div class="text-gray-500">开始</div>
-                            <div class="font-mono">00:00:00</div>
-                        </div>
-                        <div class="bg-bg-primary rounded p-2">
-                            <div class="text-gray-500">结束</div>
-                            <div class="font-mono">00:00:05</div>
-                        </div>
-                        <div class="bg-bg-primary rounded p-2">
-                            <div class="text-gray-500">分辨率</div>
-                            <div class="font-mono">1920×1080</div>
-                        </div>
-                        <div class="bg-bg-primary rounded p-2">
-                            <div class="text-gray-500">帧率</div>
-                            <div class="font-mono">30 FPS</div>
-                        </div>
+                        <div class="bg-bg-primary rounded p-2"><div class="text-gray-500">开始</div><div id="clip-start" class="font-mono">--:--:--</div></div>
+                        <div class="bg-bg-primary rounded p-2"><div class="text-gray-500">结束</div><div id="clip-end" class="font-mono">--:--:--</div></div>
+                        <div class="bg-bg-primary rounded p-2"><div class="text-gray-500">分辨率</div><div class="font-mono">1920×1080</div></div>
+                        <div class="bg-bg-primary rounded p-2"><div class="text-gray-500">帧率</div><div class="font-mono">30 FPS</div></div>
                     </div>
                 </div>
-                
-                <!-- AI Image Generation -->
+                <div class="bg-bg-card rounded-lg p-3 border border-border">
+                    <div class="flex items-center justify-between mb-3"><span class="text-sm font-medium">📁 项目信息</span></div>
+                    <div class="space-y-2 text-xs">
+                        <div class="flex justify-between"><span class="text-gray-400">时长</span><span id="project-duration" class="font-mono">00:00</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">采样率</span><span id="project-samplerate" class="font-mono">--</span></div>
+                        <div class="flex justify-between"><span class="text-gray-400">片段数</span><span id="project-clips" class="font-mono">0</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="ai-panel" class="flex-1 overflow-y-auto p-3 space-y-4 hidden">
                 <div class="bg-bg-card rounded-lg p-3 border border-border">
                     <div class="flex items-center justify-between mb-3">
-                        <span class="text-sm font-medium">🖼️ AI生图</span>
-                        <select class="bg-bg-primary border border-border rounded px-2 py-1 text-xs">
-                            <option>MiniMax</option>
-                            <option>Gemini</option>
-                            <option>DALL-E</option>
-                        </select>
+                        <span class="text-sm font-medium">🖼️ AI生图 (MiniMax)</span>
+                        <span id="api-status" class="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">未配置密钥</span>
                     </div>
-                    
                     <div class="space-y-3">
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">API Key <span class="text-gray-600">(仅存于本机浏览器 session)</span></label>
+                            <input id="api-key-input" type="password" autocomplete="off" placeholder="在此粘贴 MiniMax API Key" class="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-accent font-mono">
+                            <p class="text-[10px] text-gray-500 mt-1">请勿将密钥提交到 Git；演示页仅供本机使用。</p>
+                        </div>
                         <div>
                             <label class="text-xs text-gray-400 mb-1 block">提示词</label>
-                            <textarea class="w-full h-20 bg-bg-primary border border-border rounded-lg p-2 text-sm resize-none outline-none focus:border-accent"
-                                placeholder="Cyberpunk city at night with neon lights...">Cyberpunk city at night, neon lights reflecting on wet streets, futuristic atmosphere, cinematic lighting</textarea>
+                            <textarea id="prompt-input" class="w-full h-20 bg-bg-primary border border-border rounded-lg p-2 text-sm resize-none outline-none focus:border-accent"
+                                placeholder="Cyberpunk city at night with neon lights...">Cyberpunk city at night, neon lights reflecting on wet streets, futuristic atmosphere, cinematic lighting, highly detailed, 8k</textarea>
                         </div>
-                        
                         <div>
                             <label class="text-xs text-gray-400 mb-1 block">负面提示词</label>
-                            <input type="text" value="blurry, low quality, distorted" 
-                                   class="w-full bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent">
+                            <input id="negative-prompt-input" type="text" value="blurry, low quality, distorted, ugly, text, watermark" class="w-full bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent">
                         </div>
-                        
-                        <div>
-                            <label class="text-xs text-gray-400 mb-1 block">种子</label>
-                            <div class="flex gap-2">
-                                <input type="text" value="随机" class="flex-1 bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm outline-none focus:border-accent">
-                                <button class="px-3 py-1.5 bg-bg-primary border border-border rounded-lg hover:border-accent">🎲</button>
-                            </div>
-                        </div>
-                        
-                        <div>
-                            <label class="text-xs text-gray-400 mb-1 block">步数: <span class="text-accent">30</span></label>
-                            <input type="range" min="10" max="50" value="30" class="w-full accent-accent">
-                        </div>
-                        
-                        <div>
-                            <label class="text-xs text-gray-400 mb-1 block">CFG: <span class="text-accent">7.5</span></label>
-                            <input type="range" min="1" max="15" value="7.5" step="0.5" class="w-full accent-accent">
-                        </div>
-                        
-                        <button class="w-full py-2 bg-accent hover:bg-accent-hover rounded-lg text-sm font-medium transition-colors">
-                            ✨ 生成图像
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- AI Video Generation -->
-                <div class="bg-bg-card rounded-lg p-3 border border-border">
-                    <div class="flex items-center justify-between mb-3">
-                        <span class="text-sm font-medium">🎬 图生视频</span>
-                    </div>
-                    
-                    <div class="space-y-3">
-                        <div>
-                            <label class="text-xs text-gray-400 mb-1 block">视频模型</label>
-                            <select class="w-full bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm">
-                                <option>Kling 1.0 (推荐)</option>
-                                <option>Seedance</option>
-                                <option>Runway</option>
-                            </select>
-                        </div>
-                        
                         <div class="grid grid-cols-2 gap-2">
                             <div>
-                                <label class="text-xs text-gray-400 mb-1 block">时长</label>
-                                <select class="w-full bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm">
-                                    <option>5秒</option>
-                                    <option>10秒</option>
+                                <label class="text-xs text-gray-400 mb-1 block">宽高比</label>
+                                <select id="aspect-ratio-select" class="w-full bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm">
+                                    <option value="1:1">1:1</option><option value="16:9" selected>16:9</option><option value="9:16">9:16</option>
                                 </select>
                             </div>
                             <div>
-                                <label class="text-xs text-gray-400 mb-1 block">运镜</label>
-                                <select class="w-full bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm">
-                                    <option>自动</option>
-                                    <option>推近</option>
-                                    <option>拉远</option>
-                                    <option>平移</option>
+                                <label class="text-xs text-gray-400 mb-1 block">数量</label>
+                                <select id="num-images-select" class="w-full bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm">
+                                    <option value="1">1张</option><option value="2">2张</option><option value="4">4张</option>
                                 </select>
                             </div>
                         </div>
-                        
-                        <button class="w-full py-2 bg-accent hover:bg-accent-hover rounded-lg text-sm font-medium transition-colors">
-                            🎬 生成视频
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">步数: <span id="steps-value" class="text-accent">30</span></label>
+                            <input id="steps-input" type="range" min="10" max="50" value="30" class="w-full accent-accent">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400 mb-1 block">CFG: <span id="cfg-value" class="text-accent">7.5</span></label>
+                            <input id="cfg-input" type="range" min="1" max="15" value="7.5" step="0.5" class="w-full accent-accent">
+                        </div>
+                        <button id="btn-generate" class="w-full py-2.5 bg-accent hover:bg-accent-hover rounded-lg text-sm font-medium transition-colors gen-btn flex items-center justify-center gap-2">
+                            ✨ 生成图像
                         </button>
+                        <div id="gen-status" class="hidden">
+                            <div class="text-xs text-gray-400 mb-1">生成进度</div>
+                            <div class="w-full h-2 bg-bg-primary rounded-full overflow-hidden">
+                                <div id="gen-progress-bar" class="h-full bg-accent gen-progress rounded-full" style="width:0%"></div>
+                            </div>
+                            <div id="gen-status-text" class="text-xs text-gray-500 mt-1 text-center">准备就绪</div>
+                        </div>
                     </div>
                 </div>
-                
+                <div class="bg-bg-card rounded-lg p-3 border border-border">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-sm font-medium">🎵 歌词→Prompt</span>
+                        <span class="text-xs text-accent">实验性</span>
+                    </div>
+                    <button id="btn-lyrics-to-prompt" class="w-full py-2 bg-bg-primary border border-border hover:border-accent rounded-lg text-sm transition-colors">
+                        🎤 从歌词生成Prompt
+                    </button>
+                    <div id="lyrics-prompt-result" class="mt-2 text-xs text-gray-300 hidden p-2 bg-bg-primary rounded"></div>
+                </div>
+            </div>
+
+            <div id="nodes-panel" class="flex-1 overflow-y-auto p-3 hidden">
+                <div class="text-center text-xs text-gray-400 py-8">
+                    <div class="text-4xl mb-2">🔗</div>
+                    <div>节点流程编辑</div>
+                    <div class="text-gray-500 mt-1">查看底部时间线面板</div>
+                </div>
             </div>
         </aside>
     </div>
-    
-    <!-- Bottom - Timeline + Node Flow -->
+
     <div class="h-72 bg-bg-panel border-t border-border flex flex-col flex-shrink-0">
-        
-        <!-- Timeline Tabs -->
         <div class="flex items-center justify-between px-4 py-2 border-b border-border">
             <div class="flex gap-1">
-                <button class="tab-btn active px-4 py-1 rounded text-sm font-medium" onclick="showTab('timeline')">📐 时间线</button>
-                <button class="tab-btn px-4 py-1 rounded text-sm font-medium text-gray-400" onclick="showTab('nodes')">🔗 节点流程</button>
-                <button class="tab-btn px-4 py-1 rounded text-sm font-medium text-gray-400" onclick="showTab('batch')">📦 批量生成</button>
+                <button class="tab-btn active px-4 py-1 rounded text-sm font-medium" data-btab="timeline">📐 时间线</button>
+                <button class="tab-btn px-4 py-1 rounded text-sm font-medium text-gray-400" data-btab="nodes">🔗 节点流程</button>
+                <button class="tab-btn px-4 py-1 rounded text-sm font-medium text-gray-400" data-btab="batch">📦 批量生成</button>
             </div>
-            
             <div class="flex items-center gap-4 text-sm text-gray-400">
-                <span>▶ 00:05:32 / 00:03:45</span>
-                <button class="hover:text-white">⚙️</button>
+                <span id="timeline-time">▶ 00:00 / 00:00</span>
+                <button id="btn-timeline-settings" class="hover:text-white">⚙️</button>
             </div>
         </div>
-        
-        <!-- Timeline View -->
+
         <div id="timeline-view" class="flex-1 overflow-auto p-3">
-            <div class="min-w-full">
-                <!-- Timeline Ruler -->
+            <div id="timeline-content" class="min-w-full">
                 <div class="flex h-6 mb-2 text-xs text-gray-500 pl-24">
                     <div class="w-16"></div>
-                    <div class="flex-1 timeline-track relative">
-                        <span class="absolute left-0">0s</span>
-                        <span class="absolute left-[12.5%]">5s</span>
-                        <span class="absolute left-[25%]">10s</span>
-                        <span class="absolute left-[37.5%]">15s</span>
-                        <span class="absolute left-[50%]">20s</span>
-                        <span class="absolute left-[62.5%]">25s</span>
-                        <span class="absolute left-[75%]">30s</span>
-                        <span class="absolute left-[87.5%]">35s</span>
-                    </div>
+                    <div id="timeline-ruler" class="flex-1 timeline-track relative"></div>
                 </div>
-                
-                <!-- Audio Track -->
                 <div class="flex h-10 mb-2">
-                    <div class="w-24 flex items-center text-xs text-gray-400 pr-2">
-                        <span>🎵</span>
-                        <span class="ml-1 truncate">音频</span>
-                    </div>
-                    <div class="flex-1 bg-bg-card rounded relative overflow-hidden">
-                        <div class="absolute inset-0 waveform opacity-30"></div>
-                        <div class="playhead" style="left: 25%;"></div>
+                    <div class="w-24 flex items-center text-xs text-gray-400 pr-2"><span>🎵</span><span class="ml-1 truncate">音频</span></div>
+                    <div id="audio-track" class="flex-1 bg-bg-card rounded relative overflow-hidden">
+                        <div id="audio-waveform-track" class="absolute inset-0 opacity-30"></div>
+                        <div class="timeline-playhead" style="left: 0%;"></div>
                     </div>
                 </div>
-                
-                <!-- Main Video Track -->
                 <div class="flex h-12 mb-2">
-                    <div class="w-24 flex items-center text-xs text-gray-400 pr-2">
-                        <span>📺</span>
-                        <span class="ml-1 truncate">主视频</span>
-                    </div>
-                    <div class="flex-1 relative">
+                    <div class="w-24 flex items-center text-xs text-gray-400 pr-2"><span>📺</span><span class="ml-1 truncate">主视频</span></div>
+                    <div id="video-track" class="flex-1 relative">
                         <div class="absolute inset-0 timeline-track"></div>
-                        <div class="playhead" style="left: 25%;"></div>
-                        
-                        <!-- Clips -->
-                        <div class="absolute top-1 bottom-1 left-0 w-[15%]">
-                            <div class="clip-block">kf_赛博_001</div>
-                        </div>
-                        <div class="absolute top-1 bottom-1 left-[16%] w-[8%]">
-                            <div class="clip-block" style="background: linear-gradient(135deg, #10B981, #059669);">过渡</div>
-                        </div>
-                        <div class="absolute top-1 bottom-1 left-[25%] w-[20%]">
-                            <div class="clip-block">kf_霓虹_002</div>
-                        </div>
-                        <div class="absolute top-1 bottom-1 left-[46%] w-[8%]">
-                            <div class="clip-block" style="background: linear-gradient(135deg, #10B981, #059669);">过渡</div>
-                        </div>
-                        <div class="absolute top-1 bottom-1 left-[55%] w-[15%]">
-                            <div class="clip-block">kf_脉冲_003</div>
-                        </div>
+                        <div class="timeline-playhead" style="left: 0%;"></div>
                     </div>
                 </div>
-                
-                <!-- Overlay Track -->
-                <div class="flex h-10 mb-2">
-                    <div class="w-24 flex items-center text-xs text-gray-400 pr-2">
-                        <span>🎨</span>
-                        <span class="ml-1 truncate">叠加层</span>
-                    </div>
-                    <div class="flex-1 bg-bg-card rounded relative">
-                        <div class="playhead" style="left: 25%;"></div>
-                        <div class="absolute top-1 bottom-1 left-[5%] w-[60%]">
-                            <div class="h-full bg-accent/30 rounded border border-accent/50 flex items-center justify-center text-xs">
-                                粒子效果 A (循环)
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Lyrics Track -->
                 <div class="flex h-8">
-                    <div class="w-24 flex items-center text-xs text-gray-400 pr-2">
-                        <span>📝</span>
-                        <span class="ml-1 truncate">歌词</span>
-                    </div>
-                    <div class="flex-1 relative">
-                        <div class="playhead" style="left: 25%;"></div>
-                        <div class="absolute top-0 bottom-0 left-[2%] flex">
-                            <div class="px-2 py-0.5 bg-pink-500/30 rounded text-xs mr-1">「城市霓虹」</div>
-                            <div class="px-2 py-0.5 bg-pink-500/30 rounded text-xs mr-1">「车流不息」</div>
-                            <div class="px-2 py-0.5 bg-pink-500/30 rounded text-xs">「夜」</div>
-                        </div>
+                    <div class="w-24 flex items-center text-xs text-gray-400 pr-2"><span>📝</span><span class="ml-1 truncate">歌词</span></div>
+                    <div id="lyrics-track" class="flex-1 relative">
+                        <div class="timeline-playhead" style="left: 0%;"></div>
                     </div>
                 </div>
             </div>
         </div>
-        
-        <!-- Node Flow View -->
+
         <div id="nodes-view" class="flex-1 overflow-auto p-3 hidden">
-            <div class="flex gap-4 min-h-full items-center justify-center">
-                
-                <!-- Nodes -->
-                <div class="node p-3 text-center">
-                    <div class="text-2xl mb-1">🎵</div>
-                    <div class="text-xs font-medium">音频输入</div>
-                    <div class="text-xs text-gray-500 mt-1">demo.mp3</div>
-                </div>
-                
+            <div class="flex gap-4 min-h-full items-center justify-center flex-wrap">
+                <div class="node p-3 text-center"><div class="text-2xl mb-1">🎵</div><div class="text-xs font-medium">音频输入</div><div id="node-audio-name" class="text-xs text-gray-500 mt-1">未加载</div></div>
                 <div class="text-accent text-2xl">→</div>
-                
-                <div class="node p-3 text-center">
-                    <div class="text-2xl mb-1">📊</div>
-                    <div class="text-xs font-medium">BPM分析</div>
-                    <div class="text-xs text-accent mt-1">128 BPM</div>
-                </div>
-                
+                <div id="node-bpm" class="node p-3 text-center"><div class="text-2xl mb-1">📊</div><div class="text-xs font-medium">BPM分析</div><div id="node-bpm-value" class="text-xs text-accent mt-1">-- BPM</div></div>
                 <div class="text-accent text-2xl">→</div>
-                
-                <div class="node p-3 text-center">
-                    <div class="text-2xl mb-1">📝</div>
-                    <div class="text-xs font-medium">歌词NLP</div>
-                    <div class="text-xs text-gray-500 mt-1">已分析</div>
-                </div>
-                
+                <div id="node-lyrics" class="node p-3 text-center"><div class="text-2xl mb-1">📝</div><div class="text-xs font-medium">歌词NLP</div><div id="node-lyrics-status" class="text-xs text-gray-500 mt-1">--</div></div>
                 <div class="text-accent text-2xl">→</div>
-                
-                <div class="node p-3 text-center border-accent">
-                    <div class="text-2xl mb-1">✨</div>
-                    <div class="text-xs font-medium">Prompt生成</div>
-                    <div class="text-xs text-accent mt-1">5个片段</div>
-                </div>
-                
+                <div class="node p-3 text-center border-accent"><div class="text-2xl mb-1">✨</div><div class="text-xs font-medium">Prompt生成</div><div id="node-prompt-count" class="text-xs text-accent mt-1">0个片段</div></div>
                 <div class="text-accent text-2xl">→</div>
-                
-                <div class="node p-3 text-center">
-                    <div class="text-2xl mb-1">🎨</div>
-                    <div class="text-xs font-medium">风格选择</div>
-                    <div class="text-xs text-gray-500 mt-1">赛博朋克</div>
-                </div>
-                
-                <div class="text-accent text-2xl">→</div>
-                
-                <div class="node p-3 text-center">
-                    <div class="text-2xl mb-1">🖼️</div>
-                    <div class="text-xs font-medium">静帧生成</div>
-                    <div class="text-xs text-accent mt-1">3/5 完成</div>
-                </div>
-                
-                <div class="text-accent text-2xl">→</div>
-                
-                <div class="node p-3 text-center">
-                    <div class="text-2xl mb-1">🎬</div>
-                    <div class="text-xs font-medium">视频生成</div>
-                    <div class="text-xs text-gray-500 mt-1">等待中</div>
-                </div>
-                
-                <div class="text-accent text-2xl">→</div>
-                
-                <div class="node p-3 text-center bg-accent/20 border-accent">
-                    <div class="text-2xl mb-1">📺</div>
-                    <div class="text-xs font-medium">渲染输出</div>
-                    <div class="text-xs text-gray-500 mt-1">准备就绪</div>
-                </div>
-                
+                <div class="node p-3 text-center"><div class="text-2xl mb-1">🖼️</div><div class="text-xs font-medium">静帧生成</div><div id="node-images-status" class="text-xs text-accent mt-1">0/0 完成</div></div>
             </div>
-            
             <div class="flex justify-center gap-2 mt-4">
-                <button class="px-4 py-2 bg-bg-card hover:bg-border rounded-lg text-sm">➕ 添加节点</button>
-                <button class="px-4 py-2 bg-bg-card hover:bg-border rounded-lg text-sm">🔄 自动布局</button>
-                <button class="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg text-sm">▶️ 运行流程</button>
+                <button id="btn-run-flow" class="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg text-sm">▶️ 运行流程</button>
             </div>
         </div>
-        
-        <!-- Batch Generate View -->
+
         <div id="batch-view" class="flex-1 overflow-auto p-3 hidden">
             <div class="bg-bg-card rounded-lg p-4">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-sm font-medium">📦 批量生成任务</h3>
-                    <button class="px-3 py-1 bg-accent hover:bg-accent-hover rounded text-sm">➕ 新建任务</button>
+                    <button id="btn-new-batch" class="px-3 py-1 bg-accent hover:bg-accent-hover rounded text-sm">➕ 新建任务</button>
                 </div>
-                
                 <table class="w-full text-sm">
                     <thead>
                         <tr class="text-gray-500 text-xs">
-                            <th class="text-left py-2">片段</th>
-                            <th class="text-left py-2">类型</th>
-                            <th class="text-left py-2">状态</th>
-                            <th class="text-left py-2">进度</th>
-                            <th class="text-right py-2">操作</th>
+                            <th class="text-left py-2">片段</th><th class="text-left py-2">类型</th><th class="text-left py-2">状态</th><th class="text-left py-2">进度</th><th class="text-right py-2">操作</th>
                         </tr>
                     </thead>
-                    <tbody class="text-gray-300">
+                    <tbody id="batch-tbody" class="text-gray-300">
                         <tr class="border-t border-border">
-                            <td class="py-2">kf_赛博都市_001</td>
-                            <td class="py-2">🖼️ 静帧</td>
-                            <td class="py-2"><span class="text-accent-success">✓ 完成</span></td>
-                            <td class="py-2">100%</td>
-                            <td class="py-2 text-right">
-                                <button class="text-accent hover:underline">查看</button>
-                            </td>
-                        </tr>
-                        <tr class="border-t border-border">
-                            <td class="py-2">kf_霓虹_002</td>
-                            <td class="py-2">🖼️ 静帧</td>
-                            <td class="py-2"><span class="text-accent-warning">⚡ 生成中</span></td>
-                            <td class="py-2">
-                                <div class="w-24 h-2 bg-bg-primary rounded-full overflow-hidden">
-                                    <div class="h-full bg-accent rounded-full" style="width: 65%;"></div>
-                                </div>
-                            </td>
-                            <td class="py-2 text-right">
-                                <button class="text-gray-500 hover:underline">取消</button>
-                            </td>
-                        </tr>
-                        <tr class="border-t border-border">
-                            <td class="py-2">kf_脉冲_003</td>
-                            <td class="py-2">🎬 视频</td>
-                            <td class="py-2"><span class="text-gray-500">⏳ 排队中</span></td>
-                            <td class="py-2">0%</td>
-                            <td class="py-2 text-right">
-                                <button class="text-gray-500 hover:underline">取消</button>
-                            </td>
+                            <td colspan="5" class="py-4 text-center text-gray-500 text-xs">暂无生成任务。上传音频并点击"分析BPM"开始创作。</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
+
+<script>
+// ============================================================
+// VJ-Gen V4.5 - Main Application Script
+// ============================================================
+const MINIMAX_KEY_STORAGE = 'vj_gen_minimax_api_key';
+
+const state = {
+    audioFile: null,
+    audioElement: null,
+    isPlaying: false,
+    currentTime: 0,
+    duration: 0,
+    bpm: null,
+    beats: [],
+    sections: [],
+    lyrics: [],
+    generatedImages: [],
+    timelineScale: 1,
+    currentAspectRatio: '16:9',
+    waveformData: null,
+    audioCtx: null,
+    audioBuffer: null,
+    segments: [],
+};
+
+function getMiniMaxClient() {
+    if (typeof MiniMaxImageAPI === 'undefined') return null;
+    const key = ($('api-key-input') && $('api-key-input').value) ? $('api-key-input').value.trim() : '';
+    if (!key) return null;
+    return new MiniMaxImageAPI(key);
+}
+
+function syncApiStatusBadge() {
+    const el = $('api-status');
+    if (!el) return;
+    const hasLib = typeof MiniMaxImageAPI !== 'undefined';
+    const hasKey = $('api-key-input') && $('api-key-input').value.trim().length > 0;
+    if (!hasLib) {
+        el.className = 'text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-300';
+        el.textContent = '未加载 SDK';
+    } else if (!hasKey) {
+        el.className = 'text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-300';
+        el.textContent = '未配置密钥';
+    } else {
+        el.className = 'text-xs px-2 py-0.5 rounded bg-green-500/20 text-green-400';
+        el.textContent = '就绪';
+    }
+}
+
+const $ = id => document.getElementById(id);
+
+// ============================================================
+// Utility Functions
+// ============================================================
+function formatTime(sec) {
+    if (!sec || isNaN(sec)) return '00:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function formatTimeMs(ms) {
+    const totalSec = ms / 1000;
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = Math.floor(totalSec % 60);
+    const cs = Math.floor((totalSec % 1) * 100);
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${String(cs).padStart(2,'0')}`;
+}
+
+function hashCombined(str) {
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) h = ((h << 5) + h) ^ str.charCodeAt(i);
+    return h >>> 0;
+}
+
+function persistApiKey() {
+    const inp = $('api-key-input');
+    if (!inp) return;
+    const v = inp.value.trim();
+    if (v) sessionStorage.setItem(MINIMAX_KEY_STORAGE, v);
+    else sessionStorage.removeItem(MINIMAX_KEY_STORAGE);
+    syncApiStatusBadge();
+}
+
+// ============================================================
+// Tab Navigation
+// ============================================================
+document.querySelectorAll('[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-tab]').forEach(b => { b.classList.remove('active'); b.classList.add('text-gray-400'); });
+        btn.classList.add('active'); btn.classList.remove('text-gray-400');
+        ['props-panel','ai-panel','nodes-panel'].forEach(p => $(p).classList.add('hidden'));
+        $(btn.dataset.tab + '-panel').classList.remove('hidden');
+    });
+});
+
+document.querySelectorAll('[data-btab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-btab]').forEach(b => { b.classList.remove('active'); b.classList.add('text-gray-400'); });
+        btn.classList.add('active'); btn.classList.remove('text-gray-400');
+        ['timeline-view','nodes-view','batch-view'].forEach(v => $(v).classList.add('hidden'));
+        $(btn.dataset.btab + '-view').classList.remove('hidden');
+    });
+});
+
+// ============================================================
+// Audio Upload & Loading
+// ============================================================
+const audioUploadZone = $('audio-upload-zone');
+const audioFileInput = $('audio-file-input');
+
+$('btn-import').addEventListener('click', () => audioFileInput.click());
+
+audioUploadZone.addEventListener('click', () => audioFileInput.click());
+audioFileInput.addEventListener('change', e => { if (e.target.files[0]) loadAudioFile(e.target.files[0]); });
+
+audioUploadZone.addEventListener('dragover', e => { e.preventDefault(); audioUploadZone.classList.add('drag-over'); });
+audioUploadZone.addEventListener('dragleave', () => audioUploadZone.classList.remove('drag-over'));
+audioUploadZone.addEventListener('drop', e => {
+    e.preventDefault(); audioUploadZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('audio/')) loadAudioFile(file);
+});
+
+function loadAudioFile(file) {
+    console.log('[VJ-Gen] Loading audio:', file.name);
+    state.audioFile = file;
+    state.duration = 0;
+    state.currentTime = 0;
+    state.bpm = null;
+    state.beats = [];
+    state.sections = [];
+    state.segments = [];
+    state.generatedImages = [];
+
+    $('audio-name').textContent = file.name;
+    $('btn-audio-delete').classList.remove('hidden');
+    $('bpm-display').classList.add('hidden');
+    $('beat-info').classList.add('hidden');
+    $('lyrics-timeline').classList.add('hidden');
+    $('node-bpm-value').textContent = '-- BPM';
+    $('node-audio-name').textContent = file.name.length > 15 ? file.name.substring(0,15) + '...' : file.name;
+    $('node-images-status').textContent = '0/0 完成';
+    $('node-prompt-count').textContent = '0个片段';
+    $('project-clips').textContent = '0';
+
+    // Create audio element
+    if (state.audioElement) { state.audioElement.pause(); state.audioElement.src = ''; }
+    state.audioElement = new Audio();
+    state.audioElement.src = URL.createObjectURL(file);
+    state.audioElement.crossOrigin = 'anonymous';
+
+    state.audioElement.addEventListener('loadedmetadata', () => {
+        state.duration = state.audioElement.duration;
+        updateTimeDisplay();
+        updateTimelineRuler();
+        drawWaveform();
+        applyVolumeFromControls();
+        syncSeekBarFromAudio();
+        console.log('[VJ-Gen] Audio loaded:', state.duration.toFixed(2) + 's');
+        $('project-duration').textContent = formatTime(state.duration);
+    });
+
+    state.audioElement.addEventListener('timeupdate', () => {
+        state.currentTime = state.audioElement.currentTime;
+        updateTimeDisplay();
+        updatePlayhead();
+        syncSeekBarFromAudio();
+        updateLyricsHighlight();
+    });
+
+    state.audioElement.addEventListener('ended', () => {
+        state.isPlaying = false;
+        $('btn-play').textContent = '▶️';
+    });
+
+    addAudioToList(file);
+}
+
+function addAudioToList(file) {
+    const div = document.createElement('div');
+    div.className = 'flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-card cursor-pointer text-sm';
+    const duration = state.duration ? formatTime(state.duration) : '--:--';
+    div.innerHTML = `<span>🎵</span><span class="flex-1 truncate">${file.name}</span><span class="text-xs text-gray-500">${duration}</span>`;
+    div.addEventListener('click', () => loadAudioFile(file));
+    $('audio-files-list').prepend(div);
+}
+
+// Delete audio
+$('btn-audio-delete').addEventListener('click', () => {
+    if (state.audioElement) { state.audioElement.pause(); state.audioElement.src = ''; }
+    state.audioFile = null;
+    state.audioElement = null;
+    state.duration = 0;
+    state.currentTime = 0;
+    $('audio-name').textContent = '未加载音频';
+    $('btn-audio-delete').classList.add('hidden');
+    $('audio-files-list').innerHTML = '';
+    $('waveform-canvas').getContext('2d').clearRect(0, 0, 1000, 100);
+    $('waveform-playhead').style.left = '0%';
+    $('project-duration').textContent = '00:00';
+    $('project-samplerate').textContent = '--';
+    $('timeline-time').textContent = '▶ 00:00 / 00:00';
+    $('time-display').textContent = '00:00 / 00:00';
+});
+
+// ============================================================
+// Playback Controls
+// ============================================================
+let seekUserDragging = false;
+
+function syncSeekBarFromAudio() {
+    const bar = $('seek-bar');
+    if (!bar || seekUserDragging || !state.duration) return;
+    bar.value = String(Math.round((state.currentTime / state.duration) * 1000));
+}
+
+function applyVolumeFromControls() {
+    const vDesk = $('volume-bar');
+    const vMob = $('volume-bar-mobile');
+    const raw = vDesk && vDesk.value ? Number(vDesk.value) : (vMob ? Number(vMob.value) : 100);
+    const vol = Math.max(0, Math.min(1, raw / 100));
+    if (state.audioElement) state.audioElement.volume = vol;
+}
+
+function setVolumeUi(val) {
+    const v = Math.max(0, Math.min(100, Math.round(val)));
+    const desk = $('volume-bar');
+    const mob = $('volume-bar-mobile');
+    if (desk) desk.value = String(v);
+    if (mob) mob.value = String(v);
+    applyVolumeFromControls();
+}
+
+$('seek-bar').addEventListener('pointerdown', () => { seekUserDragging = true; });
+$('seek-bar').addEventListener('pointerup', () => { seekUserDragging = false; });
+$('seek-bar').addEventListener('change', () => { seekUserDragging = false; });
+$('seek-bar').addEventListener('input', () => {
+    if (!state.audioElement || !state.duration) return;
+    const t = (Number($('seek-bar').value) / 1000) * state.duration;
+    state.audioElement.currentTime = t;
+    state.currentTime = t;
+    updatePlayhead();
+    updateTimeDisplay();
+    updateLyricsHighlight();
+});
+
+['volume-bar', 'volume-bar-mobile'].forEach(id => {
+    const el = $(id);
+    if (!el) return;
+    el.addEventListener('input', () => applyVolumeFromControls());
+});
+
+$('btn-play').addEventListener('click', togglePlay);
+$('btn-prev').addEventListener('click', () => { if (state.audioElement) state.audioElement.currentTime = 0; });
+$('btn-skip-back').addEventListener('click', () => {
+    if (state.audioElement && state.duration) {
+        state.audioElement.currentTime = Math.max(0, state.audioElement.currentTime - 5);
+    }
+});
+$('btn-skip-fwd').addEventListener('click', () => {
+    if (state.audioElement && state.duration) {
+        state.audioElement.currentTime = Math.min(state.duration, state.audioElement.currentTime + 5);
+    }
+});
+$('btn-next').addEventListener('click', () => {
+    if (state.audioElement && state.duration) {
+        state.audioElement.currentTime = Math.max(0, state.duration - 0.25);
+    }
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space') return;
+    const t = e.target;
+    const tag = t && t.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable) return;
+    e.preventDefault();
+    togglePlay();
+});
+
+$('btn-ai-gen-quick').addEventListener('click', () => {
+    const aiTab = document.querySelector('[data-tab="ai"]');
+    if (aiTab) aiTab.click();
+    $('prompt-input').focus();
+});
+
+function togglePlay() {
+    if (!state.audioElement) return;
+    if (state.isPlaying) {
+        state.audioElement.pause();
+        state.isPlaying = false;
+        $('btn-play').textContent = '▶️';
+    } else {
+        state.audioElement.play();
+        state.isPlaying = true;
+        $('btn-play').textContent = '⏸️';
+    }
+}
+
+function updateTimeDisplay() {
+    const ct = formatTime(state.currentTime);
+    const dt = formatTime(state.duration);
+    $('time-display').textContent = `${ct} / ${dt}`;
+    $('timeline-time').textContent = `▶ ${ct} / ${dt}`;
+}
+
+// ============================================================
+// Waveform Drawing
+// ============================================================
+async function drawWaveform() {
+    if (!state.audioElement || !state.duration) return;
     
-    <script>
-        function showTab(tab) {
-            // Update buttons
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('active');
-                btn.classList.add('text-gray-400');
-            });
-            event.target.classList.add('active');
-            event.target.classList.remove('text-gray-400');
-            
-            // Update views
-            document.getElementById('timeline-view').classList.add('hidden');
-            document.getElementById('nodes-view').classList.add('hidden');
-            document.getElementById('batch-view').classList.add('hidden');
-            document.getElementById(tab + '-view').classList.remove('hidden');
+    const canvas = $('waveform-canvas');
+    const container = $('waveform-container');
+    canvas.width = container.offsetWidth;
+    canvas.height = container.offsetHeight;
+    
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    
+    // Generate simulated waveform data
+    const samples = w;
+    const data = [];
+    for (let i = 0; i < samples; i++) {
+        const t = i / samples;
+        const base = 0.3 + Math.sin(t * 20 * Math.PI) * 0.2;
+        const noise = Math.random() * 0.4;
+        const beat = Math.sin(t * state.bpm/60 * 2 * Math.PI * state.duration) * 0.3;
+        data.push(Math.min(1, Math.max(0.1, base + noise + Math.abs(beat))));
+    }
+    state.waveformData = data;
+    
+    // Draw waveform
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#6366F1';
+    
+    for (let i = 0; i < samples; i++) {
+        const barHeight = data[i] * h * 0.8;
+        const y = (h - barHeight) / 2;
+        ctx.fillRect(i, y, 1, barHeight);
+    }
+}
+
+function updatePlayhead() {
+    if (!state.duration) return;
+    const pct = (state.currentTime / state.duration) * 100;
+    $('waveform-playhead').style.left = pct + '%';
+    
+    // Update all timeline playheads
+    document.querySelectorAll('.timeline-playhead').forEach(ph => {
+        ph.style.left = pct + '%';
+    });
+}
+
+// Waveform click to seek
+$('waveform-container').addEventListener('click', (e) => {
+    if (!state.audioElement || !state.duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    state.audioElement.currentTime = pct * state.duration;
+});
+
+// ============================================================
+// Timeline Ruler
+// ============================================================
+function updateTimelineRuler() {
+    if (!state.duration) return;
+    const ruler = $('timeline-ruler');
+    ruler.innerHTML = '';
+    const interval = state.duration <= 30 ? 5 : state.duration <= 120 ? 10 : 30;
+    for (let t = 0; t <= state.duration; t += interval) {
+        const pct = (t / state.duration) * 100;
+        const span = document.createElement('span');
+        span.className = 'absolute text-xs text-gray-500';
+        span.style.left = pct + '%';
+        span.textContent = t + 's';
+        ruler.appendChild(span);
+    }
+}
+
+// ============================================================
+// BPM Analysis (Simulated)
+// ============================================================
+$('btn-analyze').addEventListener('click', async () => {
+    if (!state.audioElement) {
+        alert('请先上传音频文件');
+        return;
+    }
+    
+    $('btn-analyze').disabled = true;
+    $('btn-analyze').textContent = '⏳ 分析中...';
+    
+    // Simulate analysis delay
+    await new Promise(r => setTimeout(r, 1500));
+    
+    // Generate simulated BPM (real implementation would use Web Audio API)
+    const bpmOptions = [100, 110, 120, 125, 128, 130, 140];
+    state.bpm = bpmOptions[Math.floor(Math.random() * bpmOptions.length)];
+    
+    // Generate beat times
+    const beatInterval = 60 / state.bpm;
+    state.beats = [];
+    for (let t = 0; t < state.duration; t += beatInterval) {
+        state.beats.push(t);
+    }
+    
+    // Generate section markers (roughly every 8 beats)
+    const sectionLength = beatInterval * 8;
+    state.sections = [];
+    for (let t = 0; t < state.duration; t += sectionLength) {
+        state.sections.push({ start: t, end: Math.min(t + sectionLength, state.duration) });
+    }
+    
+    // Generate segments for each section
+    state.segments = state.sections.map((s, i) => ({
+        id: i,
+        start: s.start,
+        end: s.end,
+        duration: s.end - s.start,
+        prompt: `Section ${i + 1} at ${t}s`,
+        imageUrl: null,
+        status: 'pending'
+    }));
+    
+    console.log('[VJ-Gen] BPM Analysis complete:', state.bpm, 'BPM');
+    console.log('[VJ-Gen] Beats:', state.beats.length, '| Sections:', state.sections.length);
+    
+    // Update UI
+    $('bpm-display').classList.remove('hidden');
+    $('bpm-value').textContent = state.bpm;
+    $('beat-info').classList.remove('hidden');
+    $('beat-count').textContent = state.beats.length;
+    $('section-count').textContent = state.sections.length;
+    $('node-bpm-value').textContent = state.bpm + ' BPM';
+    $('node-prompt-count').textContent = state.segments.length + '个片段';
+    $('project-clips').textContent = state.segments.length;
+    $('btn-analyze').disabled = false;
+    $('btn-analyze').textContent = '📊 分析BPM';
+    
+    // Show beat markers
+    showBeatMarkers();
+    
+    // Redraw waveform with beat info
+    await drawWaveform();
+    
+    // Update video track with segments
+    updateVideoTrack();
+    
+    // Update batch table
+    updateBatchTable();
+    
+    // Generate sample lyrics
+    generateSampleLyrics();
+    
+    console.log('[VJ-Gen V4.5] Analysis complete! BPM:', state.bpm, 'Segments:', state.segments.length);
+}
+
+function showBeatMarkers() {
+    if (!state.duration || state.beats.length === 0) return;
+    const container = $('beat-markers');
+    container.innerHTML = '';
+    state.beats.forEach((beat, i) => {
+        const marker = document.createElement('div');
+        marker.className = 'beat-marker' + (i % 4 === 0 ? ' downbeat' : '');
+        marker.style.left = (beat / state.duration * 100) + '%';
+        container.appendChild(marker);
+    });
+}
+
+function updateVideoTrack() {
+    const track = $('video-track');
+    // Keep the timeline track and playhead
+    const playhead = track.querySelector('.timeline-playhead');
+    track.innerHTML = '';
+    if (playhead) track.appendChild(playhead);
+    
+    const playheadEl = track.querySelector('.timeline-playhead');
+    
+    state.segments.forEach((seg, i) => {
+        const left = (seg.start / state.duration * 100);
+        const width = (seg.duration / state.duration * 100);
+        const div = document.createElement('div');
+        div.className = 'clip-block';
+        div.style.position = 'absolute';
+        div.style.top = '4px';
+        div.style.bottom = '4px';
+        div.style.left = left + '%';
+        div.style.width = width + '%';
+        div.textContent = `片段${i+1}`;
+        div.addEventListener('click', () => selectSegment(seg));
+        track.appendChild(div);
+    });
+    
+    if (playheadEl) track.appendChild(playheadEl);
+}
+
+function selectSegment(seg) {
+    $('current-clip-name').textContent = `片段${seg.id + 1}`;
+    $('clip-start').textContent = formatTimeMs(seg.start * 1000);
+    $('clip-end').textContent = formatTimeMs(seg.end * 1000);
+    console.log('[VJ-Gen] Selected segment:', seg);
+}
+
+// ============================================================
+// Lyrics
+// ============================================================
+$('btn-load-lyrics').addEventListener('click', () => $('lyrics-file-input').click());
+$('lyrics-file-input').addEventListener('change', e => {
+    if (e.target.files[0]) loadLyricsFile(e.target.files[0]);
+});
+
+function loadLyricsFile(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        parseLRC(e.target.result);
+    };
+    reader.readAsText(file);
+}
+
+function parseLRC(lrcText) {
+    const lyrics = [];
+    const lines = lrcText.split('\n');
+    const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2})\]/;
+    
+    lines.forEach(line => {
+        const match = line.match(timeRegex);
+        if (match) {
+            const min = parseInt(match[1]);
+            const sec = parseInt(match[2]);
+            const cs = parseInt(match[3]);
+            const time = min * 60 + sec + cs / 100;
+            const text = line.replace(timeRegex, '').trim();
+            if (text) lyrics.push({ time, text });
         }
-    </script>
+    });
+    
+    state.lyrics = lyrics;
+    $('lyrics-timeline').classList.remove('hidden');
+    $('node-lyrics-status').textContent = lyrics.length + '句歌词';
+    renderLyricsTimeline();
+    console.log('[VJ-Gen] Loaded', lyrics.length, 'lyrics lines');
+}
+
+function generateSampleLyrics() {
+    // Generate some sample lyrics based on sections
+    const sampleTexts = [
+        '城市霓虹闪烁', '车流不息', '夜幕降临', '星空之下',
+        '未来已来', '光芒流转', '时空交错', '梦想启航'
+    ];
+    state.lyrics = state.sections.map((s, i) => ({
+        time: s.start,
+        text: sampleTexts[i % sampleTexts.length]
+    }));
+    $('lyrics-timeline').classList.remove('hidden');
+    $('node-lyrics-status').textContent = state.lyrics.length + '句歌词 (模拟)';
+    renderLyricsTimeline();
+}
+
+function renderLyricsTimeline() {
+    const container = $('lyrics-container');
+    const track = $('lyrics-track');
+    container.innerHTML = '';
+    track.innerHTML = '';
+    
+    const playhead = document.createElement('div');
+    playhead.className = 'timeline-playhead';
+    playhead.style.left = '0%';
+    track.appendChild(playhead);
+    
+    if (!state.duration) return;
+    
+    state.lyrics.forEach((lyric, i) => {
+        const pct = (lyric.time / state.duration) * 100;
+        const item = document.createElement('div');
+        item.className = 'lyric-item bg-pink-500/30 border border-pink-500/50 text-pink-200';
+        item.style.left = pct + '%';
+        item.textContent = lyric.text;
+        container.appendChild(item);
+        
+        const trackItem = document.createElement('div');
+        trackItem.className = 'lyric-item bg-pink-500/30 border border-pink-500/50 text-pink-200';
+        trackItem.style.left = pct + '%';
+        trackItem.textContent = lyric.text;
+        track.appendChild(trackItem);
+    });
+}
+
+// ============================================================
+// Batch Table
+// ============================================================
+function updateBatchTable() {
+    const tbody = $('batch-tbody');
+    if (state.segments.length === 0) {
+        tbody.innerHTML = '<tr class="border-t border-border"><td colspan="5" class="py-4 text-center text-gray-500 text-xs">暂无生成任务。上传音频并点击"分析BPM"开始创作。</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = state.segments.map(seg => `
+        <tr class="border-t border-border" data-seg-id="${seg.id}">
+            <td class="py-2">片段${seg.id + 1}</td>
+            <td class="py-2">🖼️ 静帧</td>
+            <td class="py-2"><span class="text-gray-500">⏳ 排队中</span></td>
+            <td class="py-2"><div class="w-24 h-2 bg-bg-primary rounded-full overflow-hidden"><div class="h-full bg-accent rounded-full" style="width: 0%"></div></div></td>
+            <td class="py-2 text-right"><button class="text-accent hover:underline text-xs" onclick="generateForSegment(${seg.id})">生成</button></td>
+        </tr>
+    `).join('');
+}
+
+$('btn-new-batch').addEventListener('click', () => {
+    if (state.segments.length === 0) {
+        alert('请先上传音频并分析BPM');
+        return;
+    }
+    updateBatchTable();
+});
+
+// ============================================================
+// MiniMax Image Generation
+// ============================================================
+$('btn-generate').addEventListener('click', async () => {
+    const prompt = $('prompt-input').value.trim();
+    if (!prompt) {
+        alert('请输入提示词');
+        return;
+    }
+    
+    if (!miniMaxAPI) {
+        alert('MiniMax API 未加载。请确保 image-gen-api.js 在同一目录下。');
+        return;
+    }
+    
+    $('btn-generate').disabled = true;
+    $('btn-generate').innerHTML = '<span class="animate-spin">⏳</span> 生成中...';
+    $('gen-status').classList.remove('hidden');
+    $('gen-status-text').textContent = '正在连接 MiniMax API...';
+    $('preview-loading').classList.remove('hidden');
+    
+    // Animate progress
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        progress = Math.min(progress + Math.random() * 15, 90);
+        $('gen-progress-bar').style.width = progress + '%';
+        $('gen-progress-text').textContent = Math.round(progress) + '%';
+        $('gen-status-text').textContent = '生成中... ' + Math.round(progress) + '%';
+    }, 500);
+    
+    try {
+        const aspectRatio = $('aspect-ratio-select').value;
+        const numImages = parseInt($('num-images-select').value);
+        
+        console.log('[VJ-Gen] Calling MiniMax API...');
+        console.log('[VJ-Gen] Prompt:', prompt);
+        console.log('[VJ-Gen] Aspect Ratio:', aspectRatio);
+        console.log('[VJ-Gen] Num Images:', numImages);
+        
+        const result = await miniMaxAPI.generateImage({
+            prompt: prompt,
+            aspect_ratio: aspectRatio,
+            num_images: numImages,
+            negative_prompt: $('negative-prompt-input').value,
+        });
+        
+        clearInterval(progressInterval);
+        $('gen-progress-bar').style.width = '100%';
+        $('gen-progress-text').textContent = '100%';
+        $('gen-status-text').textContent = '生成完成!';
+        
+        console.log('[VJ-Gen] API Result:', result);
+        
+        // Display generated images
+        if (result.data && result.data.length > 0) {
+            const imageUrl = result.data[0].url;
+            $('preview-image').src = imageUrl;
+            $('preview-content').classList.remove('hidden');
+            $('preview-empty').classList.add('hidden');
+            
+            // Add to generated list
+            addGeneratedImage(imageUrl, prompt);
+            
+            // Update batch
+            if (state.segments.length > 0) {
+                state.segments[0].imageUrl = imageUrl;
+                state.segments[0].status = 'done';
+                updateBatchTable();
+                $('node-images-status').textContent = `1/${state.segments.length} 完成`;
+            }
+        }
+        
+        setTimeout(() => {
+            $('preview-loading').classList.add('hidden');
+        }, 1000);
+        
+    } catch (error) {
+        clearInterval(progressInterval);
+        console.error('[VJ-Gen] Generation failed:', error);
+        $('gen-status-text').textContent = '生成失败: ' + error.message;
+        $('preview-loading').classList.add('hidden');
+        alert('生成失败: ' + error.message);
+    }
+    
+    $('btn-generate').disabled = false;
+    $('btn-generate').innerHTML = '✨ 生成图像';
+});
+
+// Generate for specific segment
+window.generateForSegment = async function(segId) {
+    const seg = state.segments[segId];
+    if (!seg) return;
+    
+    const prompt = $('prompt-input').value.trim() + ` (segment ${segId + 1})`;
+    
+    if (!miniMaxAPI) {
+        alert('MiniMax API 未加载');
+        return;
+    }
+    
+    try {
+        const result = await miniMaxAPI.generateImage({ prompt });
+        if (result.data && result.data.length > 0) {
+            seg.imageUrl = result.data[0].url;
+            seg.status = 'done';
+            updateBatchTable();
+            
+            const doneCount = state.segments.filter(s => s.status === 'done').length;
+            $('node-images-status').textContent = `${doneCount}/${state.segments.length} 完成`;
+            
+            // Show in preview if first image
+            if (segId === 0) {
+                $('preview-image').src = seg.imageUrl;
+                $('preview-content').classList.remove('hidden');
+            }
+            
+            addGeneratedImage(seg.imageUrl, prompt);
+        }
+    } catch (error) {
+        console.error('[VJ-Gen] Segment generation failed:', error);
+        alert('生成失败: ' + error.message);
+    }
+};
+
+function addGeneratedImage(url, prompt) {
+    state.generatedImages.push({ url, prompt, timestamp: Date.now() });
+    
+    const div = document.createElement('div');
+    div.className = 'flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-bg-card cursor-pointer text-sm bg-accent/10 border border-accent/30';
+    div.innerHTML = `<span>🖼️</span><span class="flex-1 truncate">${prompt.substring(0, 20)}...</span>`;
+    div.addEventListener('click', () => {
+        $('preview-image').src = url;
+        $('preview-content').classList.remove('hidden');
+    });
+    $('ai-generated-list').prepend(div);
+}
+
+// ============================================================
+// Lyrics to Prompt (Experimental)
+// ============================================================
+$('btn-lyrics-to-prompt').addEventListener('click', () => {
+    if (state.lyrics.length === 0) {
+        $('lyrics-prompt-result').textContent = '无可用歌词，请先加载LRC文件或分析音频';
+        $('lyrics-prompt-result').classList.remove('hidden');
+        return;
+    }
+    
+    // Find current lyric based on playback time
+    const currentLyric = state.lyrics.find(l => l.time <= state.currentTime);
+    if (currentLyric) {
+        const prompt = `Art inspired by lyrics: "${currentLyric.text}", digital art, vibrant colors, dramatic lighting`;
+        $('prompt-input').value = prompt;
+        $('lyrics-prompt-result').textContent = `当前歌词: "${currentLyric.text}" → 已填充到Prompt`;
+        $('lyrics-prompt-result').classList.remove('hidden');
+    } else {
+        $('lyrics-prompt-result').textContent = '当前播放位置无对应歌词';
+        $('lyrics-prompt-result').classList.remove('hidden');
+    }
+});
+
+// ============================================================
+// Sliders
+// ============================================================
+$('steps-input').addEventListener('input', e => $('steps-value').textContent = e.target.value);
+$('cfg-input').addEventListener('input', e => $('cfg-value').textContent = e.target.value);
+
+// ============================================================
+// Aspect Ratio
+// ============================================================
+document.querySelectorAll('.aspect-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.aspect-btn').forEach(b => { b.classList.remove('bg-accent', 'text-white'); b.classList.add('hover:bg-bg-card'); });
+        btn.classList.add('bg-accent', 'text-white');
+        btn.classList.remove('hover:bg-bg-card');
+        state.currentAspectRatio = btn.dataset.aspect;
+        $('aspect-ratio-select').value = btn.dataset.aspect;
+        console.log('[VJ-Gen] Aspect ratio:', state.currentAspectRatio);
+    });
+});
+
+// ============================================================
+// Zoom
+// ============================================================
+$('btn-zoom-in').addEventListener('click', () => {
+    const sel = $('zoom-select');
+    const idx = sel.selectedIndex;
+    if (idx < sel.options.length - 1) { sel.selectedIndex = idx + 1; sel.dispatchEvent(new Event('change')); }
+});
+$('btn-zoom-out').addEventListener('click', () => {
+    const sel = $('zoom-select');
+    const idx = sel.selectedIndex;
+    if (idx > 0) { sel.selectedIndex = idx - 1; sel.dispatchEvent(new Event('change')); }
+});
+$('zoom-select').addEventListener('change', e => {
+    state.timelineScale = parseInt(e.target.value) / 100;
+    const content = $('timeline-content');
+    content.style.transform = `scale(${state.timelineScale})`;
+    content.style.transformOrigin = 'left top';
+});
+
+// ============================================================
+// Style Presets
+// ============================================================
+const stylePrompts = {
+    cyberpunk: 'Cyberpunk city at night, neon lights reflecting on wet streets, futuristic atmosphere, cinematic lighting, 8k, highly detailed',
+    fantasy: 'Fantasy dreamlike landscape, ethereal lighting, magical atmosphere, surreal, beautiful, 8k, highly detailed',
+    fire: 'Inferno of flames, dramatic fire effects, intense heat, cinematic lighting, 8k, highly detailed',
+    minimal: 'Minimalist abstract art, clean lines, monochromatic, simple composition, 8k, beautiful'
+};
+
+document.querySelectorAll('.style-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const style = btn.dataset.style;
+        if (stylePrompts[style]) {
+            $('prompt-input').value = stylePrompts[style];
+        }
+        document.querySelectorAll('.style-preset').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+    });
+});
+
+// ============================================================
+// Fullscreen
+// ============================================================
+$('btn-fullscreen').addEventListener('click', () => {
+    if (document.fullscreenElement) {
+        document.exitFullscreen();
+    } else {
+        document.documentElement.requestFullscreen();
+    }
+});
+
+// ============================================================
+// Console Welcome
+// ============================================================
+console.log('%c VJ-Gen V4.5 ', 'background: #6366F1; color: white; font-size: 20px; padding: 5px 10px; border-radius: 5px;');
+console.log('%c AI音视频编辑器 - 最小可用版本 ', 'color: #6366F1; font-size: 14px;');
+console.log('API Key:', MINIMAX_API_KEY ? MINIMAX_API_KEY.substring(0, 15) + '...' : 'NOT SET');
+console.log('MiniMax API:', miniMaxAPI ? '✓ Initialized' : '✗ Not loaded (check image-gen-api.js)');
+console.log('---');
+console.log('工作流程:');
+console.log('1. 上传音频文件');
+console.log('2. 点击"分析BPM"生成节拍/段落数据');
+console.log('3. 输入提示词，点击"生成图像"调用MiniMax API');
+console.log('4. 生成的图片显示在预览区');
+console.log('---');
+console.log('[VJ-Gen V4.5] Ready! 🎉');
+</script>
 </body>
 </html>
