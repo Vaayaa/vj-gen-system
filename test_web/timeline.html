@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>VJ Timeline 可视化</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a0a; color: #e0e0e0; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; padding: 20px; }
+h1 { color: #00d4ff; font-size: 18px; margin-bottom: 16px; }
+.upload { margin-bottom: 20px; }
+.upload input[type=file] { background: #1a1a1a; border: 1px solid #333; color: #e0e0e0; padding: 8px; border-radius: 4px; width: 300px; }
+.upload button { background: #00d4ff; color: #000; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; margin-left: 8px; }
+.upload button:hover { background: #00aacc; }
+.info { margin-bottom: 20px; display: flex; gap: 16px; flex-wrap: wrap; }
+.info span { background: #1a1a1a; border: 1px solid #333; padding: 6px 12px; border-radius: 4px; }
+.info .label { color: #666; }
+.info .value { color: #00d4ff; font-weight: bold; }
+
+/* Timeline canvas area */
+.timeline-area { position: relative; margin-bottom: 24px; }
+#timelineCanvas { background: #111; border: 1px solid #222; border-radius: 4px; width: 100%; height: 200px; display: block; }
+
+/* Beat markers */
+.beat-markers { position: relative; height: 30px; margin-top: 4px; }
+.beat-marker { position: absolute; top: 0; width: 2px; height: 100%; background: rgba(0,212,255,0.3); }
+.beat-marker.downbeat { background: rgba(255,51,102,0.6); width: 3px; }
+
+/* Palette bar */
+.palette-bar { display: flex; height: 40px; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+.palette-segment { display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8); overflow: hidden; white-space: nowrap; }
+
+/* Sections */
+.sections { margin-bottom: 20px; }
+.section { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #1a1a1a; }
+.section .time { color: #666; width: 80px; font-size: 12px; }
+.section .type { width: 80px; font-weight: bold; font-size: 12px; }
+.section .bar { flex: 1; height: 24px; border-radius: 3px; position: relative; overflow: hidden; display: flex; align-items: center; padding: 0 8px; }
+.section .bar .energy-fill { position: absolute; left: 0; top: 0; height: 100%; opacity: 0.3; }
+.section .bar span { position: relative; z-index: 1; font-size: 11px; color: #fff; }
+.section .palette { width: 80px; text-align: right; font-size: 11px; }
+
+/* Palette preview */
+.palette-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-top: 20px; }
+.palette-card { background: #111; border: 1px solid #222; border-radius: 6px; overflow: hidden; }
+.palette-card .colors { display: flex; height: 40px; }
+.palette-card .color { flex: 1; }
+.palette-card .name { padding: 6px 8px; font-size: 11px; color: #888; }
+
+/* Loading */
+#loading { display: none; color: #00d4ff; margin-bottom: 16px; }
+#loading.active { display: block; }
+
+/* Error */
+#error { display: none; color: #ff3366; margin-bottom: 16px; background: rgba(255,51,102,0.1); border: 1px solid #ff3366; padding: 12px; border-radius: 4px; }
+#error.active { display: block; }
+</style>
+</head>
+<body>
+
+<h1>🎬 VJ Timeline 可视化</h1>
+
+<div class="upload">
+  <input type="file" id="audioFile" accept="audio/*">
+  <button onclick="analyze()">分析</button>
+  <button onclick="loadDemo()">加载Demo</button>
+</div>
+
+<div id="loading">分析中...</div>
+<div id="error"></div>
+
+<div class="info" id="info" style="display:none">
+  <span><span class="label">BPM:</span> <span class="value" id="bpmVal">--</span></span>
+  <span><span class="label">时长:</span> <span class="value" id="durVal">--</span></span>
+  <span><span class="label">节拍:</span> <span class="value" id="beatsVal">--</span></span>
+  <span><span class="label">段落:</span> <span class="value" id="segsVal">--</span></span>
+  <span><span class="label">全局调色板:</span> <span class="value" id="paletteVal">--</span></span>
+  <span><span class="label">动画速度:</span> <span class="value" id="speedVal">--</span></span>
+</div>
+
+<div class="palette-bar" id="paletteBar" style="display:none"></div>
+<canvas id="timelineCanvas" style="display:none"></canvas>
+<div class="beat-markers" id="beatMarkers" style="display:none"></div>
+
+<div class="sections" id="sections" style="display:none"></div>
+
+<div class="palette-grid" id="paletteGrid" style="display:none"></div>
+
+<script>
+const PALETTE_COLORS = {
+  dark: { primary: '#000', secondary: '#0a0a0a', accent: '#333', highlight: '#666', glow: '#999' },
+  deep_tech: { primary: '#0a0f1a', secondary: '#1a3a5c', accent: '#00d4ff', highlight: '#ff3366', glow: '#00ffaa' },
+  chill: { primary: '#0d1b2a', secondary: '#1b3a4b', accent: '#48cae4', highlight: '#90e0ef', glow: '#caf0f8' },
+  energy_peak: { primary: '#1a0a2e', secondary: '#3d1a5c', accent: '#ff6600', highlight: '#ffff00', glow: '#ff0066' },
+  bright: { primary: '#fff', secondary: '#f0f0f0', accent: '#ffdd00', highlight: '#ff8800', glow: '#ff0066' },
+};
+
+let lastResult = null;
+
+async function analyze() {
+  const file = document.getElementById('audioFile').files[0];
+  if (!file) { showError('请先选择音频文件'); return; }
+
+  document.getElementById('loading').classList.add('active');
+  document.getElementById('error').classList.remove('active');
+  hideResults();
+
+  const fd = new FormData();
+  fd.append('audio', file);
+
+  try {
+    const resp = await fetch('/api/visual_map', { method: 'POST', body: fd });
+    const json = await resp.json();
+    document.getElementById('loading').classList.remove('active');
+
+    if (!json.success) { showError(json.error); return; }
+    lastResult = json;
+    renderResults(json);
+  } catch(e) {
+    document.getElementById('loading').classList.remove('active');
+    showError('请求失败: ' + e.message);
+  }
+}
+
+async function loadDemo() {
+  document.getElementById('loading').classList.add('active');
+  document.getElementById('error').classList.remove('active');
+  hideResults();
+
+  // 用演示数据
+  const demo = {
+    bpm: 128,
+    duration: 30,
+    timeline: generateDemoTimeline(),
+    palettes: PALETTE_COLORS,
+    segments: [
+      { start: 0, end: 6, section_type: 'intro', params: { palette: 'deep_tech', animation_speed: 0.69, transition_type: 'fade', energy: 0.3 }},
+      { start: 6, end: 12, section_type: 'verse', params: { palette: 'chill', animation_speed: 0.88, transition_type: 'cut', energy: 0.5 }},
+      { start: 12, end: 18, section_type: 'chorus', params: { palette: 'energy_peak', animation_speed: 1.27, transition_type: 'glitch', energy: 0.8 }},
+      { start: 18, end: 24, section_type: 'bridge', params: { palette: 'deep_tech', animation_speed: 0.78, transition_type: 'dissolve', energy: 0.6 }},
+      { start: 24, end: 30, section_type: 'outro', params: { palette: 'dark', animation_speed: 0.59, transition_type: 'fade', energy: 0.3 }},
+    ],
+    global: { palette: 'deep_tech', animation_speed: 1.0 },
+  };
+  demo.timeline = generateDemoTimeline();
+
+  document.getElementById('loading').classList.remove('active');
+  lastResult = demo;
+  renderResults(demo);
+}
+
+function generateDemoTimeline() {
+  const frames = [];
+  for (let i = 0; i < 30 * 30; i++) { // 30fps * 30s
+    const t = i / 30;
+    const beatInPhase = (t % 0.468) / 0.468;
+    const isBeat = beatInPhase < 0.05;
+    const pulse = isBeat ? Math.exp(-beatInPhase * 20) : 0;
+    frames.push({
+      timestamp: t,
+      scale: 1 + pulse * 0.15,
+      brightness: 0.5 + pulse * 0.3,
+      glow: 0.3 + pulse * 0.5,
+      flash: isBeat ? pulse * 0.8 : 0,
+      pulse: pulse,
+      beat_hit: isBeat,
+      transition: 'cut',
+    });
+  }
+  return frames;
+}
+
+function renderResults(r) {
+  // Info
+  document.getElementById('info').style.display = 'flex';
+  document.getElementById('bpmVal').textContent = r.bpm || r.global?.palette || '--';
+  document.getElementById('durVal').textContent = (r.duration || 30).toFixed(1) + 's';
+  document.getElementById('beatsVal').textContent = (r.timeline?.length || 0) + ' frames';
+  document.getElementById('segsVal').textContent = r.segments?.length || 0;
+  document.getElementById('paletteVal').textContent = r.global?.palette || '--';
+  document.getElementById('speedVal').textContent = ((r.global?.animation_speed || 1.0) * 100).toFixed(0) + '%';
+
+  // Palette bar
+  const bar = document.getElementById('paletteBar');
+  bar.style.display = 'flex';
+  bar.innerHTML = '';
+  if (r.segments) {
+    r.segments.forEach(seg => {
+      const pct = ((seg.end - seg.start) / r.duration * 100).toFixed(2) + '%';
+      const colors = PALETTE_COLORS[seg.params?.palette] || PALETTE_COLORS.dark;
+      const div = document.createElement('div');
+      div.className = 'palette-segment';
+      div.style.width = pct;
+      div.style.background = colors.primary;
+      div.style.color = colors.accent;
+      div.style.borderRight = '1px solid #000';
+      div.innerHTML = `<span style="font-size:9px;overflow:hidden">${seg.section_type}</span>`;
+      bar.appendChild(div);
+    });
+  }
+
+  // Canvas timeline
+  const canvas = document.getElementById('timelineCanvas');
+  canvas.style.display = 'block';
+  drawTimeline(canvas, r.timeline || [], r.duration || 30);
+
+  // Beat markers
+  const markers = document.getElementById('beatMarkers');
+  markers.style.display = 'block';
+  markers.innerHTML = '';
+  if (r.timeline) {
+    const fps = 30;
+    r.timeline.forEach((f, i) => {
+      if (f.beat_hit) {
+        const pct = (f.timestamp / r.duration * 100).toFixed(2) + '%';
+        const div = document.createElement('div');
+        div.className = 'beat-marker' + (f.pulse > 0.7 ? ' downbeat' : '');
+        div.style.left = pct;
+        markers.appendChild(div);
+      }
+    });
+  }
+
+  // Sections
+  const secDiv = document.getElementById('sections');
+  secDiv.style.display = 'block';
+  secDiv.innerHTML = '';
+  if (r.segments) {
+    r.segments.forEach(seg => {
+      const colors = PALETTE_COLORS[seg.params?.palette] || PALETTE_COLORS.dark;
+      const row = document.createElement('div');
+      row.className = 'section';
+      const energyPct = ((seg.params?.energy || 0.5) * 100).toFixed(0);
+      row.innerHTML = `
+        <div class="time">${seg.start.toFixed(1)}s - ${seg.end.toFixed(1)}s</div>
+        <div class="type" style="color:${colors.accent}">${seg.section_type}</div>
+        <div class="bar">
+          <div class="energy-fill" style="width:${energyPct}%;background:${colors.accent}"></div>
+          <span>${seg.params?.animation_speed?.toFixed(2) || '1.00'}x · ${seg.params?.transition_type || 'cut'}</span>
+        </div>
+        <div class="palette" style="color:${colors.accent}">${seg.params?.palette || 'default'}</div>
+      `;
+      secDiv.appendChild(row);
+    });
+  }
+
+  // Palette grid
+  const grid = document.getElementById('paletteGrid');
+  grid.style.display = 'grid';
+  grid.innerHTML = '';
+  Object.entries(PALETTE_COLORS).forEach(([key, colors]) => {
+    const card = document.createElement('div');
+    card.className = 'palette-card';
+    card.innerHTML = `
+      <div class="colors">
+        <div class="color" style="background:${colors.primary}"></div>
+        <div class="color" style="background:${colors.secondary}"></div>
+        <div class="color" style="background:${colors.accent}"></div>
+        <div class="color" style="background:${colors.highlight}"></div>
+        <div class="color" style="background:${colors.glow}"></div>
+      </div>
+      <div class="name">${key} <span style="color:#555">${colors.accent}</span></div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function drawTimeline(canvas, timeline, duration) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width = canvas.offsetWidth * 2;
+  const H = canvas.height = 300;
+
+  // Background
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, W, H);
+
+  if (!timeline.length) return;
+
+  // Draw glow curve
+  ctx.beginPath();
+  ctx.strokeStyle = '#00d4ff';
+  ctx.lineWidth = 2;
+  timeline.forEach((f, i) => {
+    const x = (f.timestamp / duration) * W;
+    const y = H - f.glow * H * 0.8 - 20;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Draw pulse (beat hits)
+  timeline.forEach((f, i) => {
+    if (f.flash > 0.1) {
+      const x = (f.timestamp / duration) * W;
+      const alpha = f.flash;
+      ctx.fillStyle = `rgba(255,51,102,${alpha * 0.7})`;
+      ctx.fillRect(x - 2, 0, 4, H);
+    }
+  });
+
+  // Draw scale curve
+  ctx.beginPath();
+  ctx.strokeStyle = '#ff6600';
+  ctx.lineWidth = 1.5;
+  timeline.forEach((f, i) => {
+    const x = (f.timestamp / duration) * W;
+    const y = H - (f.scale - 0.9) * H * 5 - 10;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Labels
+  ctx.fillStyle = '#555';
+  ctx.font = '20px monospace';
+  ctx.fillText('glow', 10, 25);
+  ctx.fillStyle = '#ff6600';
+  ctx.fillText('scale', 10, 50);
+  ctx.fillStyle = '#ff3366';
+  ctx.fillText('beats', 80, 25);
+}
+
+function hideResults() {
+  ['info', 'paletteBar', 'timelineCanvas', 'beatMarkers', 'sections', 'paletteGrid'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+}
+
+function showError(msg) {
+  const el = document.getElementById('error');
+  el.textContent = msg;
+  el.classList.add('active');
+}
+
+// Auto-resize canvas on window resize
+window.addEventListener('resize', () => {
+  if (lastResult) renderResults(lastResult);
+});
+</script>
+</body>
+</html>

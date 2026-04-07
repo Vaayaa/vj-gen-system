@@ -20,10 +20,11 @@ CTYPES = {
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         routes = {
-            '/': '/full.html',
+            '/': '/timeline.html',
             '/index.html': '/index.html',
             '/full.html': '/full.html',
             '/segments.html': '/segments.html',
+            '/timeline.html': '/timeline.html',
         }
         path = routes.get(self.path, self.path)
         self.serve_static(path)
@@ -174,23 +175,68 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({'success': False, 'error': 'No audio file'})
             return
         try:
+            # 1. 音频分析
+            audio_result = self.run_analysis('full_analysis', path)
+            if not isinstance(audio_result, dict) or 'error' in audio_result:
+                self.send_json({'success': False, 'error': str(audio_result.get('error', 'Analysis failed'))})
+                return
+
+            data = audio_result
+            bpm = data.get('beat', {}).get('bpm', 120.0)
+            beat_positions = data.get('beat', {}).get('beats', [])
+            dur = data.get('beat', {}).get('dur', 30.0)
+            segs_raw = data.get('seg', {}).get('segs', [])
+            n_segs = len(segs_raw)
+
+            # 2. 格式转换
+            beats = []
+            for i, pos in enumerate(beat_positions):
+                is_accent = (i % 4 == 0)
+                strength = 1.0 if is_accent else (0.6 if i % 2 == 0 else 0.3)
+                beats.append({'start': float(pos), 'strength': strength, 'is_accent': is_accent})
+
+            sections = []
+            for i, s in enumerate(segs_raw):
+                ratio = i / (n_segs - 1) if n_segs > 1 else 0.5
+                if ratio < 0.15: sec_type = 'intro'
+                elif ratio < 0.35: sec_type = 'verse'
+                elif ratio < 0.55: sec_type = 'chorus'
+                elif ratio < 0.75: sec_type = 'bridge'
+                else: sec_type = 'outro'
+                sec_beats = [b for b in beats if s['s'] <= b['start'] < s['e']]
+                sec_energy = sum(b['strength'] for b in sec_beats) / len(sec_beats) if sec_beats else 0.5
+                sections.append({'start': s['s'], 'end': s['e'], 'type': sec_type, 'energy': sec_energy})
+
+            energy_data = data.get('ener', data.get('energy', {}))
+            avg_energy = energy_data.get('avg_rms', 0.5) if isinstance(energy_data, dict) else 0.5
+            energy_curve = [{'timestamp': 0.0, 'energy': avg_energy}, {'timestamp': dur / 2, 'energy': min(1.0, avg_energy * 1.3)}, {'timestamp': dur, 'energy': avg_energy * 0.8}]
+
+            audio_formatted = {'bpm': bpm, 'duration': dur, 'beats': beats, 'sections': sections, 'energy_curve': energy_curve}
+
+            # 3. 调用 vj_timeline_mapper
             code = (
                 f"import sys, json; "
-                f"sys.path.insert(0, {repr(MODULE_DIR)}); "
-                f"import audio_analysis_module as am; "
-                f"import visual_mapper as vm; "
-                f"audio = am.full_analysis({repr(path)}); "
-                f"vis = vm.map_audio_to_visual(audio, current_time=0.0); "
-                f"print(json.dumps({{'audio': audio, 'vj': vis}}, ensure_ascii=False))"
+                f"sys.path.insert(0, {repr(os.path.join(MODULE_DIR, 'src', 'pipelines'))}); "
+                f"from vj_timeline_mapper import map_audio_to_visual, generate_visual_timeline, PALETTES; "
+                f"af = json.loads({repr(json.dumps(audio_formatted))}); "
+                f"vis = map_audio_to_visual(af); "
+                f"tl = generate_visual_timeline(af, fps=30); "
+                f"out = {{"
+                f"  'bpm': vis['bpm'], 'total_beats': vis['total_beats'], 'total_segments': vis['total_segments'], "
+                f"  'global': vis['global'].to_dict(), "
+                f"  'beats': [b.to_dict() for b in vis['beats']], "
+                f"  'segments': [{{'start': s.start, 'end': s.end, 'section_type': s.section_type, 'bpm': s.bpm, 'energy': s.energy, 'params': s.params.to_dict()}} for s in vis['segments']], "
+                f"  'timeline': tl, 'palettes': PALETTES"
+                f"}}; "
+                f"print(json.dumps(out, ensure_ascii=False))"
             )
-            proc = subprocess.run(
-                ['python3', '-c', code],
-                capture_output=True, timeout=60, text=True
-            )
+            proc = subprocess.run(['python3', '-c', code], capture_output=True, timeout=30, text=True)
             if proc.returncode != 0:
-                self.send_json({'success': False, 'error': proc.stderr[:300]})
+                self.send_json({'success': False, 'error': proc.stderr[:500]})
             else:
                 self.send_json({'success': True, **json.loads(proc.stdout)})
+        except Exception as e:
+            self.send_json({'success': False, 'error': str(e)[:300]})
         finally:
             try:
                 os.unlink(path)
