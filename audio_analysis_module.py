@@ -120,7 +120,10 @@ def analyze_energy(path: str, res: float = 0.5) -> Dict[str, Any]:
                          "r": round(float(np.mean(rms[s:e])), 4)})
     pk_times = librosa.onset.onset_detect(y=y, sr=sr, hop_length=h)
     pk = [round(float(x), 2) for x in librosa.frames_to_time(pk_times, sr=sr, hop_length=h)[:20]]
-    dyn = float(20 * np.log10(max(rms) + 1e-10) - 20 * np.log10(min(rms) + 1e-10))
+    # 用percentile替代min/max，避免静音段的异常值（修复187dB问题）
+    rms_lo = float(np.percentile(rms, 5))
+    rms_hi = float(np.percentile(rms, 95))
+    dyn = float(20 * np.log10(max(rms_hi, 1e-10)) - 20 * np.log10(max(rms_lo, 1e-10)))
     return {"t": rt, "rms": [round(float(x), 4) for x in rms],
             "sc_m": round(float(np.mean(sc)), 1), "dyn": round(dyn, 1),
             "segs": segs, "pk": pk, "dur": round(dur, 1), "res": res}
