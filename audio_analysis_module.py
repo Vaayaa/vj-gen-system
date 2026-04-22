@@ -180,6 +180,48 @@ def analyze_emotion(path: str) -> Dict[str, Any]:
             "dur": round(dur, 1)}
 
 
+def analyze_beats_madmom(path: str, beats_per_bar: int = 4) -> Dict[str, Any]:
+    """
+    使用 Madmom 进行专业的节拍和 downbeat 检测
+    
+    这是 librosa.analyze_beats 的高级替代方案，特点：
+    - 使用深度学习模型（RNN）进行节拍检测
+    - 准确的 downbeat（小节起点）检测
+    - 融合 DBN 进行时序约束
+    
+    Args:
+        path: 音频文件路径
+        beats_per_bar: 每小节拍数 (默认 4)
+        
+    Returns:
+        包含 downbeats, beats, tempo 等字段的字典
+    """
+    # 延迟导入，避免循环依赖
+    try:
+        from audio_madmom import MadmomAnalyzer
+    except ImportError:
+        return {"error": "audio_madmom module not available", "downbeats": [], "beats": [], "tempo": 0}
+    
+    try:
+        analyzer = MadmomAnalyzer(beats_per_bar=beats_per_bar)
+        result = analyzer.analyze(path)
+        
+        return {
+            "bpm": result.get("tempo", 120),
+            "downbeats": result.get("downbeats", []),
+            "beats": result.get("beats", []),
+            "segments": result.get("segments", []),
+            "duration": result.get("duration", 0),
+            "beats_per_bar": beats_per_bar,
+            "beat_info": result.get("beat_info", []),
+            # 兼容原有格式
+            "n_downbeats": len(result.get("downbeats", [])),
+            "n_beats": len(result.get("beats", [])),
+        }
+    except Exception as ex:
+        return {"error": str(ex)[:100], "downbeats": [], "beats": [], "tempo": 0}
+
+
 def full_analysis(path: str) -> Dict[str, Any]:
     r = {}
     for fn, key in [
@@ -191,6 +233,66 @@ def full_analysis(path: str) -> Dict[str, Any]:
         except Exception as ex:
             r[key] = {"error": str(ex)[:100]}
     return r
+
+
+def full_analysis_with_madmom(path: str, beats_per_bar: int = 4) -> Dict[str, Any]:
+    """
+    完整音频分析（包含 Madmom downbeat 检测）
+    
+    在原有 5 大函数基础上增加 Madmom 专业的节拍/downbeat 检测。
+    
+    Args:
+        path: 音频文件路径
+        beats_per_bar: 每小节拍数 (默认 4)
+        
+    Returns:
+        包含所有分析结果的字典
+    """
+    r = full_analysis(path)
+    
+    # 添加 Madmom 分析
+    madmom_result = analyze_beats_madmom(path, beats_per_bar)
+    r["madmom"] = madmom_result
+    
+    # 如果 Madmom 检测到了节拍，用它替换原有的节拍信息
+    if madmom_result.get("downbeats") and not madmom_result.get("error"):
+        # 更新节拍 BPM
+        if r.get("beat") and not r["beat"].get("error"):
+            r["beat"]["bpm_madmom"] = madmom_result["bpm"]
+            r["beat"]["downbeats"] = madmom_result["downbeats"]
+            r["beat"]["beats_per_bar"] = beats_per_bar
+    
+    return r
+
+
+def full_analysis_all_keypoints(path: str) -> Dict[str, Any]:
+    """
+    完整音频分析，包含所有关键点（downbeat + pitch + energy）
+    
+    Returns:
+        包含多模态关键点融合结果的字典
+    """
+    # 延迟导入
+    try:
+        from audio_madmom import detect_all_keypoints
+    except ImportError:
+        return {"error": "audio_madmom module not available"}
+    
+    try:
+        result = full_analysis_with_madmom(path)
+        
+        # 添加多关键点融合
+        keypoints = detect_all_keypoints(path)
+        result["keypoints"] = {
+            "downbeats": keypoints.get("downbeats", []),
+            "pitches": keypoints.get("pitches", []),
+            "energies": keypoints.get("energies", []),
+            "tempo": keypoints.get("tempo", 0),
+        }
+        
+        return result
+    except Exception as ex:
+        return {"error": str(ex)[:100]}
 
 
 if __name__ == "__main__":
