@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Madmom 音频节拍分析</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎵 Madmom 音频节拍分析</h1>
+            <p class="subtitle">VJ智能剪辑系统 · 节拍检测测试</p>
+        </header>
+
+        <div class="upload-section" id="uploadSection">
+            <div class="drop-zone" id="dropZone">
+                <div class="upload-icon">📁</div>
+                <p class="upload-text">拖拽音频文件到这里</p>
+                <p class="upload-hint">或点击选择文件</p>
+                <p class="upload-formats">支持 MP3, WAV, M4A, FLAC, OGG</p>
+            </div>
+            <input type="file" id="fileInput" accept=".mp3,.wav,.m4a,.flac,.ogg,.aac" style="display:none;">
+            <button id="selectFileBtn" class="btn btn-primary" style="margin-top:1rem;width:100%;">选择音频文件</button>
+        </div>
+
+        <div class="loading-section" id="loadingSection" style="display: none;">
+            <div class="spinner"></div>
+            <p>正在分析节拍...</p>
+            <p class="loading-hint" id="loadingHint">加载音频中...</p>
+        </div>
+
+        <div class="result-section" id="resultSection" style="display: none;">
+            <div class="file-info">
+                <span class="filename" id="fileName"></span>
+                <span class="duration" id="duration"></span>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card stat-bpm">
+                    <div class="stat-value" id="bpmValue">--</div>
+                    <div class="stat-label">BPM</div>
+                    <div class="stat-extra" id="beatInterval">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="downbeatsCount">--</div>
+                    <div class="stat-label">Downbeats</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="beatsCount">--</div>
+                    <div class="stat-label">Beats</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="segmentsCount">--</div>
+                    <div class="stat-label">Segments</div>
+                </div>
+            </div>
+
+            <div class="waveform-container">
+                <div class="waveform-header">
+                    <span>波形 & 节拍标记</span>
+                    <div class="waveform-controls">
+                        <label class="control-checkbox">
+                            <input type="checkbox" id="showDownbeats" checked>
+                            <span>Downbeats</span>
+                        </label>
+                        <label class="control-checkbox">
+                            <input type="checkbox" id="showBeats" checked>
+                            <span>Beats</span>
+                        </label>
+                    </div>
+                </div>
+                <div id="waveform"></div>
+                <div class="time-ruler" id="timeRuler"></div>
+            </div>
+
+            <div class="timeline-container">
+                <div class="timeline-header">
+                    <span>节拍时间轴</span>
+                    <span class="timeline-hint" id="timelineHint"></span>
+                </div>
+                <div class="timeline-visual" id="beatTimeline"></div>
+            </div>
+
+            <div class="segments-section">
+                <div class="segments-header">
+                    <span>小节列表</span>
+                    <button class="btn-copy" id="copySegments">复制时间点</button>
+                </div>
+                <div class="segments-list" id="segmentsList"></div>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-primary" id="analyzeAnother">分析新文件</button>
+            </div>
+        </div>
+
+        <footer>
+            <p>Powered by <a href="https://github.com/CPJKU/madmom" target="_blank">Madmom</a> + <a href="https://wavesurfer.xyz/" target="_blank">WaveSurfer.js</a></p>
+        </footer>
+    </div>
+
+    <script src="https://unpkg.com/wavesurfer.js@7"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
