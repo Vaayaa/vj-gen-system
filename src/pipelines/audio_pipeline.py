@@ -4,9 +4,11 @@ VJ-Gen 音频分析管线
 """
 
 import asyncio
+import importlib.util
+import os
 import time
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Dict, Any, Literal, Optional
 
 from src.adapters.audio.base import AudioAnalysisAdapter, AudioAnalysisParams
 from src.adapters.audio.demucs_adapter import DemucsAdapter
@@ -18,6 +20,29 @@ from src.models.schemas import (
     BeatInfo,
     EnergyPoint,
 )
+
+
+def _load_audio_analysis_module():
+    """动态加载 audio_analysis_module.py"""
+    # 找到项目根目录
+    current_file = Path(__file__).resolve()
+    project_root = current_file.parent.parent.parent  # src/pipelines -> project root
+    
+    module_path = project_root / "audio_analysis_module.py"
+    if not module_path.exists():
+        raise FileNotFoundError(f"audio_analysis_module.py not found at {module_path}")
+    
+    spec = importlib.util.spec_from_file_location("audio_analysis_module", str(module_path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+# 预加载模块
+try:
+    _audio_analysis_module = _load_audio_analysis_module()
+except Exception as e:
+    print(f"Warning: Could not load audio_analysis_module: {e}")
+    _audio_analysis_module = None
 
 
 class AudioPipeline:
@@ -148,6 +173,26 @@ class AudioPipeline:
         print(f"Audio analysis completed in {elapsed:.2f}s")
         
         return result
+
+    def analyze_with_module(self, audio_path: str) -> Dict[str, Any]:
+        """
+        使用 audio_analysis_module.py 进行完整分析
+        
+        这是对 adapter-based 方法的替代，使用经过验证的独立模块。
+        
+        Args:
+            audio_path: 音频文件路径
+            
+        Returns:
+            audio_analysis_module.full_analysis() 的原始结果字典
+        """
+        if _audio_analysis_module is None:
+            raise RuntimeError("audio_analysis_module not available")
+        
+        if not Path(audio_path).exists():
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+        
+        return _audio_analysis_module.full_analysis(audio_path)
 
     async def analyze_only(
         self,
