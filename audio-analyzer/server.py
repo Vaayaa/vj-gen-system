@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-VJ-Gen 音频分析服务 - 优化版
-使用librosa实现专业级BPM检测
+VJ-Gen 音频分析服务 - 全算法版本
+支持: librosa, Essentia, madmom, MFCC, SSM, Spectral
 """
 
 import os
 import json
-import base64
+import subprocess
 import tempfile
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -15,11 +15,23 @@ import numpy as np
 app = Flask(__name__)
 CORS(app)
 
+# 库检测
 try:
     import librosa
     HAS_LIBROSA = True
 except ImportError:
     HAS_LIBROSA = False
+
+try:
+    import essentia
+    import essentia.standard as es
+    HAS_ESSENTIA = True
+except ImportError:
+    HAS_ESSENTIA = False
+
+MADMOM_PATH = None
+if os.path.exists(os.path.expanduser('~/miniconda3/envs/madmom-env/bin/python')):
+    MADMOM_PATH = os.path.expanduser('~/miniconda3/envs/madmom-env/bin/python')
 
 SECTION_INFO = {
     'intro': {'name': 'Intro', 'icon': '🚀', 'color': '#607D8B'},
@@ -30,278 +42,808 @@ SECTION_INFO = {
     'outro': {'name': 'Outro', 'icon': '🏁', 'color': '#795548'},
 }
 
-def detect_bpm(y, sr):
-    """
-    优化版BPM检测算法
-    1. 使用44.1kHz原始采样率
-    2. 多算法融合
-    3. 自动检测half/double time
-    """
-    if not HAS_LIBROSA:
-        return 120
+def sanitize_value(v):
+    """将 NaN 和 Inf 转换为 None"""
+    if isinstance(v, float):
+        if np.isnan(v) or np.isinf(v):
+            return None
+    return v
+
+def sanitize_results(results):
+    """清理结果中的 NaN 值"""
+    cleaned = {}
+    for algo, data in results.items():
+        if isinstance(data, dict):
+            cleaned[algo] = {}
+            for k, v in data.items():
+                if isinstance(v, list):
+                    cleaned[algo][k] = [sanitize_value(item) if not isinstance(item, dict) else {kk: sanitize_value(vv) for kk, vv in item.items()} for item in v]
+                else:
+                    cleaned[algo][k] = sanitize_value(v)
+        else:
+            cleaned[algo] = sanitize_value(v)
+    return cleaned
+
+def classify_section(pos_ratio, rel_energy):
+    """基于位置和能量的段落分类"""
+    if pos_ratio < 0.08:
+        return 'intro'
+    if pos_ratio > 0.92:
+        return 'outro'
+    if rel_energy > 1.1:
+        return 'chorus'
+    elif rel_energy < 0.9:
+        if 0.4 < pos_ratio < 0.7:
+            return 'bridge'
+        return 'verse'
+    else:
+        if pos_ratio < 0.3:
+            return 'intro'
+        elif pos_ratio > 0.7:
+            return 'outro'
+        return 'preChorus'
+
+def detect_bpm_librosa(y, sr):
+    """librosa BPM检测"""
+    tempo1, beats = librosa.beat.beat_track(y=y, sr=sr, bpm=120, tightness=100)
+    tempo1 = float(tempo1)
+    
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=512)
+    tempo2 = librosa.beat.tempo(onset_envelope=onset_env, sr=sr)[0]
+    tempo2 = float(tempo2)
+    
+    beat_times = librosa.frames_to_time(beats, sr=sr, hop_length=512)
+    intervals = np.diff(beat_times)
+    intervals = intervals[(intervals > 0.2) & (intervals < 2.0)]
+    tempo3 = 60.0 / np.median(intervals) if len(intervals) > 0 else tempo1
+    
+    best_tempo = np.median([tempo1, tempo2, tempo3])
+    if best_tempo < 80:
+        best_tempo *= 2
+    elif best_tempo > 180:
+        best_tempo /= 2
+    
+    return float(round(best_tempo * 2) / 2)
+
+def detect_bpm_madmom(audio_path):
+    """madmom BPM检测"""
+    if not MADMOM_PATH:
+        return None
     
     try:
-        # 方法1: librosa beat_track (标准算法)
-        tempo1, beats = librosa.beat.beat_track(y=y, sr=sr, bpm=120, tightness=100)
-        tempo1 = float(tempo1)
+        script = f"""
+import madmom
+from madmom.features.beats import RNNBeatProcessor, BeatTrackingProcessor
+proc = BeatTrackingProcessor()(RNNBeatProcessor()(audio_file='{audio_path}'))
+print(min(proc) if len(proc) > 0 else 120)
+"""
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.py', mode='w') as f:
+            f.write(script)
+            script_path = f.name
         
-        # 方法2: onset envelope autocorrelation
-        onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=512)
-        tempo2 = librosa.beat.tempo(onset_envelope=onset_env, sr=sr)[0]
-        tempo2 = float(tempo2)
+        result = subprocess.run([MADMOM_PATH, script_path], 
+                              capture_output=True, text=True, timeout=30)
+        os.unlink(script_path)
         
-        # 方法3: 查看beat frames之间的间隔
-        beat_times = librosa.frames_to_time(beats, sr=sr, hop_length=512)
-        intervals = np.diff(beat_times)
-        intervals = intervals[(intervals > 0.2) & (intervals < 2.0)]  # 过滤异常值
-        if len(intervals) > 0:
-            median_interval = np.median(intervals)
-            tempo3 = 60.0 / median_interval if median_interval > 0 else tempo1
+        if result.returncode == 0:
+            bpm = float(result.stdout.strip())
+            return round(bpm * 2) / 2
+    except:
+        pass
+    return None
+
+def analyze_librosa(y, sr, duration):
+    """librosa段落检测"""
+    tempo = detect_bpm_librosa(y, sr)
+    beat_duration = 60 / tempo
+    bar_duration = beat_duration * 4
+    
+    rms = librosa.feature.rms(y=y, hop_length=512)[0]
+    
+    bars = []
+    current_time = 0
+    while current_time < duration:
+        bars.append({'start': current_time, 'end': min(current_time + bar_duration, duration)})
+        current_time += bar_duration
+    
+    energy_per_bar = []
+    for bar in bars:
+        start_frame = int(bar['start'] * sr / 512)
+        end_frame = min(int(bar['end'] * sr / 512), len(rms))
+        if start_frame < len(rms):
+            energy_per_bar.append(float(np.mean(rms[start_frame:end_frame])))
         else:
-            tempo3 = tempo1
+            energy_per_bar.append(0)
+    
+    if not energy_per_bar:
+        return tempo, []
+    
+    median_energy = np.median(energy_per_bar)
+    
+    # 平滑
+    window = 3
+    energy_smooth = []
+    for i in range(len(energy_per_bar)):
+        start = max(0, i - window // 2)
+        end = min(len(energy_per_bar), i + window // 2 + 1)
+        energy_smooth.append(np.mean(energy_per_bar[start:end]))
+    
+    # 合并段落
+    sections = []
+    current = {'bars': [], 'energy': []}
+    
+    for i, bar in enumerate(bars):
+        current['bars'].append(bar)
+        current['energy'].append(energy_smooth[i])
         
-        # 选择最可靠的结果 (中位数，避免极端值)
-        all_tempos = [tempo1, tempo2, tempo3]
-        best_tempo = np.median(all_tempos)
+        should_split = False
+        if len(current['energy']) >= 2:
+            prev_avg = np.mean(current['energy'][:-1])
+            curr = energy_smooth[i]
+            if prev_avg > 0:
+                ratio = curr / prev_avg
+                if ratio < 0.75 or ratio > 1.35:
+                    should_split = True
         
-        # 检测 half/double time
-        # 如果BPM太低(<80)，很可能是half time
-        if best_tempo < 80:
-            best_tempo *= 2
-        # 如果BPM太高(>180)，很可能是double time
-        elif best_tempo > 180:
-            best_tempo /= 2
+        if len(current['bars']) >= 8:
+            should_split = True
         
-        # 四舍五入到0.5
-        best_tempo = round(best_tempo * 2) / 2
+        if i == len(bars) - 1:
+            should_split = True
         
-        return float(best_tempo)
+        if should_split and current['bars']:
+            avg_e = np.mean(current['energy'])
+            rel_e = avg_e / median_energy if median_energy > 0 else 1
+            pos_ratio = current['bars'][0]['start'] / duration
+            sec_type = classify_section(pos_ratio, rel_e)
+            
+            sections.append({
+                'start': current['bars'][0]['start'],
+                'end': current['bars'][-1]['end'],
+                'type': sec_type,
+                'name': SECTION_INFO[sec_type]['name'],
+                'bars': len(current['bars']),
+                'energy': round(avg_e, 4)
+            })
+            current = {'bars': [], 'energy': []}
+    
+    return tempo, sections
+
+def analyze_essentia(audio_path, duration):
+    """Essentia段落检测"""
+    if not HAS_ESSENTIA:
+        return None, []
+    
+    try:
+        # 加载音频
+        loader = es.MonoLoader(filename=audio_path, sampleRate=44100)
+        y = loader()
+        
+        if len(y) == 0:
+            return None, []
+        
+        # 节拍检测
+        rhythm_extractor = es.RhythmExtractor2013()
+        rhythm = rhythm_extractor(y)
+        
+        # 处理不同的返回格式
+        if isinstance(rhythm, (list, tuple, np.ndarray)) and len(rhythm) >= 2:
+            bpm = float(rhythm[0])
+        else:
+            bpm = float(rhythm)
+        
+        if bpm < 80:
+            bpm *= 2
+        elif bpm > 180:
+            bpm /= 2
+        bpm = round(bpm * 2) / 2
+        
+        # 简单段落：基于能量变化
+        beat_duration = 60 / max(bpm, 60)
+        bar_duration = beat_duration * 4
+        
+        # 使用 RMS 计算能量
+        fc = es.FrameCutter(frameSize=2048, hopSize=512)
+        w = es.Windowing(type='hann')
+        spec = es.Spectrum()
+        rms_calc = es.RMS()
+        
+        rms_values = []
+        hop = 512
+        for i in range(0, len(y) - 2048, hop):
+            frame = y[i:i+2048].astype('float32')
+            w_frame = w(frame)
+            s = spec(w_frame)
+            r = rms_calc(s)
+            rms_values.append(float(r))
+        
+        rms = np.array(rms_values)
+        
+        bars = []
+        current_time = 0
+        while current_time < duration:
+            bars.append({'start': current_time, 'end': min(current_time + bar_duration, duration)})
+            current_time += bar_duration
+        
+        energy_per_bar = []
+        for bar in bars:
+            start_frame = int(bar['start'] * 44100 / 512)
+            end_frame = min(int(bar['end'] * 44100 / 512), len(rms))
+            if start_frame < len(rms):
+                energy_per_bar.append(float(np.mean(rms[start_frame:end_frame])))
+            else:
+                energy_per_bar.append(0)
+        
+        if not energy_per_bar:
+            return bpm, []
+        
+        median_energy = np.median(energy_per_bar)
+        
+        # 平滑
+        window = 3
+        energy_smooth = []
+        for i in range(len(energy_per_bar)):
+            start = max(0, i - window // 2)
+            end = min(len(energy_per_bar), i + window // 2 + 1)
+            energy_smooth.append(np.mean(energy_per_bar[start:end]))
+        
+        # 合并段落
+        sections = []
+        current = {'bars': [], 'energy': []}
+        
+        for i, bar in enumerate(bars):
+            current['bars'].append(bar)
+            current['energy'].append(energy_smooth[i])
+            
+            should_split = False
+            if len(current['energy']) >= 2:
+                prev_avg = np.mean(current['energy'][:-1])
+                curr = energy_smooth[i]
+                if prev_avg > 0:
+                    ratio = curr / prev_avg
+                    if ratio < 0.75 or ratio > 1.35:
+                        should_split = True
+            
+            if len(current['bars']) >= 8:
+                should_split = True
+            
+            if i == len(bars) - 1:
+                should_split = True
+            
+            if should_split and current['bars']:
+                avg_e = np.mean(current['energy'])
+                rel_e = avg_e / median_energy if median_energy > 0 else 1
+                pos_ratio = current['bars'][0]['start'] / duration
+                sec_type = classify_section(pos_ratio, rel_e)
+                
+                sections.append({
+                    'start': current['bars'][0]['start'],
+                    'end': current['bars'][-1]['end'],
+                    'type': sec_type,
+                    'name': SECTION_INFO[sec_type]['name'],
+                    'bars': len(current['bars']),
+                    'energy': round(avg_e, 4)
+                })
+                current = {'bars': [], 'energy': []}
+        
+        return bpm, sections
         
     except Exception as e:
-        print(f"BPM detection error: {e}")
-        return 120
+        print(f"Essentia error: {e}")
+        return None, []
 
-def detect_bpm_detailed(y, sr):
-    """
-    详细BPM分析，返回多个候选值
-    """
-    results = {}
+def analyze_madmom(audio_path, duration):
+    """madmom段落检测"""
+    if not MADMOM_PATH:
+        return None, []
+    
+    bpm = None
     
     try:
-        # 1. 标准beat_track
-        tempo1, beats = librosa.beat.beat_track(y=y, sr=sr, bpm=120, tightness=100)
-        results['beat_track'] = float(tempo1)
-        
-        # 2. onset strength tempo
-        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-        tempo2 = librosa.beat.tempo(onset_envelope=onset_env, sr=sr)[0]
-        results['onset_tempo'] = float(tempo2)
-        
-        # 3. 基于beat间隔
-        beat_times = librosa.frames_to_time(beats, sr=sr)
-        intervals = np.diff(beat_times)
-        intervals = intervals[(intervals > 0.25) & (intervals < 1.5)]
-        if len(intervals) > 0:
-            results['interval_median'] = 60.0 / np.median(intervals)
-        
-        return results
-        
-    except:
-        return {'error': 'detection failed'}
+        # madmom BPM - 使用更稳定的方法
+        script = '''
+import sys
+import madmom
+from madmom.features.beats import RNNBeatProcessor, BeatTrackingProcessor
+from madmom.features.tempo import TempoEstimationProcessor
 
-def detect_key(y, sr):
-    """调性检测"""
-    if not HAS_LIBROSA:
-        return 'C'
+audio_file = sys.argv[1]
+beats = BeatTrackingProcessor()(RNNBeatProcessor()(audio_file=audio_file))
+tempo = TempoEstimationProcessor()(beats)
+if len(tempo) > 0:
+    bpm = float(tempo[0][0])
+    if bpm < 80:
+        bpm *= 2
+    elif bpm > 180:
+        bpm /= 2
+    bpm = round(bpm * 2) / 2
+    print(bpm)
+else:
+    print("ERROR")
+'''
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.py', mode='w') as f:
+            f.write(script)
+            script_path = f.name
+        
+        # 使用列表传递参数避免shell转义问题
+        result = subprocess.run(
+            [MADMOM_PATH, script_path, audio_path],
+            capture_output=True, text=True, timeout=120
+        )
+        os.unlink(script_path)
+        
+        if result.returncode == 0 and result.stdout.strip() and not result.stdout.startswith('ERROR'):
+            bpm = float(result.stdout.strip())
+        else:
+            # Fallback: 使用librosa的BPM
+            y, sr = librosa.load(audio_path, sr=22050, mono=True)
+            bpm = detect_bpm_librosa(y, sr)
+            
+    except Exception as e:
+        print(f"madmom error: {e}")
+        # Fallback
+        try:
+            y, sr = librosa.load(audio_path, sr=22050, mono=True)
+            bpm = detect_bpm_librosa(y, sr)
+        except:
+            return None, []
+    
+    if bpm is None:
+        return None, []
     
     try:
-        chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=512)
-        mean_chroma = np.mean(chroma, axis=1)
+        beat_duration = 60 / max(bpm, 60)
+        bar_duration = beat_duration * 4
         
-        keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-        major_profile = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
-        minor_profile = np.array([6.33, 2.68, 3.52, 5.38, 3.98, 4.21, 2.62, 5.29, 3.24, 4.63, 2.83, 3.73])
+        # 使用librosa计算能量
+        y, sr = librosa.load(audio_path, sr=22050, mono=True)
+        rms = librosa.feature.rms(y=y, hop_length=512)[0]
         
-        best_key, best_score = 'C', -1
+        bars = []
+        current_time = 0
+        while current_time < duration:
+            bars.append({'start': current_time, 'end': min(current_time + bar_duration, duration)})
+            current_time += bar_duration
         
-        for i in range(12):
-            rotated = np.roll(mean_chroma, i)
-            for profile, suffix in [(major_profile, ''), (minor_profile, 'm')]:
-                corr = np.corrcoef(rotated, profile)[0, 1]
-                if corr > best_score:
-                    best_score = corr
-                    best_key = keys[i] + suffix
+        energy_per_bar = []
+        for bar in bars:
+            start_frame = int(bar['start'] * sr / 512)
+            end_frame = min(int(bar['end'] * sr / 512), len(rms))
+            if start_frame < len(rms):
+                energy_per_bar.append(float(np.mean(rms[start_frame:end_frame])))
+            else:
+                energy_per_bar.append(0)
         
-        return best_key
+        if not energy_per_bar:
+            return bpm, []
         
-    except:
-        return 'C'
+        median_energy = np.median(energy_per_bar)
+        
+        # 平滑
+        window = 3
+        energy_smooth = []
+        for i in range(len(energy_per_bar)):
+            start = max(0, i - window // 2)
+            end = min(len(energy_per_bar), i + window // 2 + 1)
+            energy_smooth.append(np.mean(energy_per_bar[start:end]))
+        
+        # 合并段落
+        sections = []
+        current = {'bars': [], 'energy': []}
+        
+        for i, bar in enumerate(bars):
+            current['bars'].append(bar)
+            current['energy'].append(energy_smooth[i])
+            
+            should_split = False
+            if len(current['energy']) >= 2:
+                prev_avg = np.mean(current['energy'][:-1])
+                curr = energy_smooth[i]
+                if prev_avg > 0:
+                    ratio = curr / prev_avg
+                    if ratio < 0.75 or ratio > 1.35:
+                        should_split = True
+            
+            if len(current['bars']) >= 8:
+                should_split = True
+            
+            if i == len(bars) - 1:
+                should_split = True
+            
+            if should_split and current['bars']:
+                avg_e = np.mean(current['energy'])
+                rel_e = avg_e / median_energy if median_energy > 0 else 1
+                pos_ratio = current['bars'][0]['start'] / duration
+                sec_type = classify_section(pos_ratio, rel_e)
+                
+                sections.append({
+                    'start': current['bars'][0]['start'],
+                    'end': current['bars'][-1]['end'],
+                    'type': sec_type,
+                    'name': SECTION_INFO[sec_type]['name'],
+                    'bars': len(current['bars']),
+                    'energy': round(avg_e, 4)
+                })
+                current = {'bars': [], 'energy': []}
+        
+        return bpm, sections
+        
+    except Exception as e:
+        print(f"madmom section error: {e}")
+        return bpm if bpm else None, []
 
-def detect_beats(y, sr, tempo):
-    """检测节拍时间点"""
-    if not HAS_LIBROSA:
-        return []
+def analyze_mfcc(y, sr, duration):
+    """MFCC段落检测"""
+    mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13, hop_length=512)
     
-    try:
-        beat_frames = librosa.beat.beat_track(y=y, sr=sr, bpm=tempo)[1]
-        return librosa.frames_to_time(beat_frames, sr=sr, hop_length=512).tolist()
-    except:
-        return []
-
-def detect_sections(duration, tempo):
-    """段落检测"""
-    bar_duration = 4 * 60 / tempo
+    segment_duration = 4.0
+    hop_duration = 512 / sr
+    n_segments = int(duration / segment_duration) + 1
     
-    if duration < 90:
-        structure = [
-            (0, min(bar_duration * 4, duration * 0.15), 'intro'),
-            (duration * 0.15, duration * 0.55, 'chorus'),
-            (duration * 0.55, duration * 0.85, 'verse'),
-            (duration * 0.85, duration, 'outro'),
-        ]
-    elif duration < 180:
-        structure = [
-            (0, min(bar_duration * 4, duration * 0.05), 'intro'),
-            (duration * 0.05, duration * 0.2, 'verse'),
-            (duration * 0.2, duration * 0.35, 'chorus'),
-            (duration * 0.35, duration * 0.5, 'verse'),
-            (duration * 0.5, duration * 0.7, 'chorus'),
-            (duration * 0.7, duration * 0.9, 'bridge'),
-            (duration * 0.9, duration, 'outro'),
-        ]
-    else:
-        structure = [
-            (0, min(bar_duration * 4, duration * 0.04), 'intro'),
-            (duration * 0.04, duration * 0.15, 'verse'),
-            (duration * 0.15, duration * 0.28, 'chorus'),
-            (duration * 0.28, duration * 0.42, 'verse'),
-            (duration * 0.42, duration * 0.55, 'chorus'),
-            (duration * 0.55, duration * 0.7, 'bridge'),
-            (duration * 0.7, duration * 0.85, 'chorus'),
-            (duration * 0.85, duration, 'outro'),
-        ]
+    segments = []
+    for i in range(n_segments):
+        start_time = i * segment_duration
+        end_time = min((i + 1) * segment_duration, duration)
+        
+        start_frame = int(start_time / hop_duration)
+        end_frame = int(end_time / hop_duration)
+        
+        if start_frame < mfccs.shape[1]:
+            segment_mfcc = mfccs[:, start_frame:min(end_frame, mfccs.shape[1])]
+            if segment_mfcc.size > 0:
+                features = np.mean(segment_mfcc, axis=1)
+                energy = float(np.mean(np.abs(segment_mfcc)))
+            else:
+                features = np.zeros(13)
+                energy = 0
+        else:
+            features = np.zeros(13)
+            energy = 0
+        
+        segments.append({
+            'start': start_time,
+            'end': end_time,
+            'features': features.tolist(),
+            'energy': energy
+        })
+    
+    max_energy = max([s['energy'] for s in segments]) if segments else 1
+    for s in segments:
+        s['energy'] = s['energy'] / max_energy if max_energy > 0 else 0
     
     sections = []
-    for start, end, sec_type in structure:
-        if start < duration and end <= duration:
-            info = SECTION_INFO.get(sec_type, SECTION_INFO['verse'])
+    current = {'start': 0, 'energy': 0, 'count': 0}
+    
+    for i, seg in enumerate(segments):
+        if current['count'] == 0:
+            current['start'] = seg['start']
+        
+        current['energy'] = (current['energy'] * current['count'] + seg['energy']) / (current['count'] + 1)
+        current['count'] += 1
+        
+        should_split = (current['count'] >= 2 and seg['end'] - current['start'] >= 8)
+        
+        if should_split or i == len(segments) - 1:
+            avg_e = current['energy']
+            pos_ratio = current['start'] / duration if duration > 0 else 0
+            sec_type = classify_section(pos_ratio, avg_e)
+            
             sections.append({
-                'start': round(start, 3),
-                'end': round(end, 3),
+                'start': current['start'],
+                'end': seg['end'],
                 'type': sec_type,
-                'name': info['name'],
-                'icon': info['icon'],
-                'color': info['color'],
+                'name': SECTION_INFO[sec_type]['name'],
+                'bars': int((seg['end'] - current['start']) / 4),
+                'energy': round(avg_e, 4)
             })
+            
+            current = {'start': seg['end'], 'energy': 0, 'count': 0}
     
-    return sections
+    return None, sections
 
-def estimate_genre(tempo, energy):
-    """风格估算"""
-    if 120 <= tempo <= 135 and energy > 60:
-        return 'Electronic/Dance'
-    elif 100 <= tempo <= 130:
-        return 'Pop'
-    elif tempo >= 140:
-        return 'Metal/Rock'
-    elif tempo < 100:
-        return 'R&B/Hip-Hop'
-    return 'Pop/Rock'
-
-def analyze_audio(audio_data, filename='unknown'):
-    """主分析函数"""
-    if not HAS_LIBROSA:
-        return {'error': 'librosa not installed'}
+def analyze_ssm(y, sr, duration):
+    """SSM段落检测 - 基于自相似矩阵的结构分析"""
+    hop_length = 512
+    mel = librosa.feature.melspectrogram(y=y, sr=sr, n_fft=2048, hop_length=hop_length, n_mels=64)
+    log_mel = librosa.power_to_db(mel, ref=np.max)
     
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as f:
-            f.write(audio_data)
-            temp_path = f.name
+    n_frames = log_mel.shape[1]
+    frame_duration = hop_length / sr
+    
+    # 使用MFCC特征进行更稳定的段落检测
+    mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=20, hop_length=hop_length)
+    
+    # 分段：每4秒一段
+    segment_duration = 4.0
+    n_segments = int(duration / segment_duration) + 1
+    
+    segments = []
+    for i in range(n_segments):
+        start_time = i * segment_duration
+        end_time = min((i + 1) * segment_duration, duration)
         
-        # 使用原始采样率 (44.1kHz) 获得最佳BPM精度
-        y, sr = librosa.load(temp_path, sr=44100, mono=True)
-        duration = librosa.get_duration(y=y, sr=sr)
+        start_frame = int(start_time / frame_duration)
+        end_frame = int(end_time / frame_duration)
         
-        # BPM检测
-        tempo = detect_bpm(y, sr)
+        if start_frame < mfccs.shape[1]:
+            seg_mfcc = mfccs[:, start_frame:min(end_frame, mfccs.shape[1])]
+            if seg_mfcc.size > 0:
+                feat = np.mean(seg_mfcc, axis=1)
+            else:
+                feat = np.zeros(20)
+        else:
+            feat = np.zeros(20)
         
-        # 详细分析 (调试用)
-        bpm_details = detect_bpm_detailed(y, sr)
+        # 计算该段的频谱质心作为额外特征
+        if start_frame < log_mel.shape[1]:
+            seg_mel = log_mel[:, start_frame:min(end_frame, log_mel.shape[1])]
+            spectral = float(np.mean(seg_mel))
+        else:
+            spectral = 0
         
-        # 调性
-        key = detect_key(y, sr)
+        segments.append({
+            'start': start_time,
+            'end': end_time,
+            'feat': feat,
+            'spectral': spectral
+        })
+    
+    # 计算段落间的相似度
+    n = len(segments)
+    similarity = np.zeros((n, n))
+    
+    for i in range(n):
+        for j in range(n):
+            # 余弦相似度
+            f1, f2 = segments[i]['feat'], segments[j]['feat']
+            norm1, norm2 = np.linalg.norm(f1), np.linalg.norm(f2)
+            if norm1 > 0 and norm2 > 0:
+                similarity[i, j] = np.dot(f1, f2) / (norm1 * norm2)
+    
+    # 对角线路径增强 (相似的段落会在对角线附近)
+    for offset in range(-2, 3):
+        for i in range(n):
+            j = i + offset
+            if 0 <= j < n:
+                similarity[i, j] *= 1.2
+    
+    # 计算每行的平均相似度 (与自身的相似度)
+    self_similarity = np.diag(similarity).copy()
+    
+    # 找变化点：局部最小值 (与周围相比不相似)
+    changes = []
+    for i in range(1, n - 1):
+        local_min = True
+        for j in range(max(0, i-2), min(n, i+3)):
+            if j != i and self_similarity[i] > self_similarity[j]:
+                local_min = False
+                break
+        if local_min and i > 0:
+            changes.append(i)
+    
+    # 如果变化点太少，使用能量变化作为补充
+    if len(changes) < 3:
+        spectral_vals = np.array([s['spectral'] for s in segments])
+        spectral_norm = (spectral_vals - spectral_vals.min()) / (spectral_vals.max() - spectral_vals.min() + 1e-10)
         
-        # 能量
-        rms = librosa.feature.rms(y=y)[0]
-        energy = float(np.mean(rms) * 100)
+        # 滑动窗口平滑
+        kernel_size = 3
+        kernel = np.ones(kernel_size) / kernel_size
+        spectral_smooth = np.convolve(spectral_norm, kernel, mode='same')
         
-        # 节拍
-        beats = detect_beats(y, sr, tempo)
-        
-        # 段落
-        sections = detect_sections(duration, tempo)
-        
-        # 风格
-        genre = estimate_genre(tempo, energy)
-        
-        os.unlink(temp_path)
-        
-        return {
-            'success': True,
-            'bpm': tempo,
-            'bpmDetails': bpm_details,  # 详细数据用于调试
-            'key': key,
-            'energy': round(energy, 1),
-            'duration': round(duration, 3),
-            'genre': genre,
-            'beats': beats,
-            'sections': sections,
-            'sampleRate': sr,
-        }
-        
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return {'error': str(e)}
+        for i in range(1, n):
+            if abs(spectral_smooth[i] - spectral_smooth[i-1]) > 0.2:
+                if i not in changes:
+                    changes.append(i)
+        changes = sorted(set(changes))
+    
+    # 构建段落
+    sections = []
+    prev_idx = 0
+    
+    for idx in changes + [n]:
+        if idx > prev_idx:
+            start_time = segments[prev_idx]['start']
+            end_time = segments[min(idx, n-1)]['end']
+            
+            # 计算该段的平均特征
+            avg_spectral = np.mean([segments[i]['spectral'] for i in range(prev_idx, min(idx, n))])
+            avg_spectral_norm = (avg_spectral - min(s['spectral'] for s in segments)) / (max(s['spectral'] for s in segments) - min(s['spectral'] for s in segments) + 1e-10)
+            
+            pos_ratio = start_time / duration if duration > 0 else 0
+            sec_type = classify_section(pos_ratio, avg_spectral_norm)
+            
+            sections.append({
+                'start': start_time,
+                'end': end_time,
+                'type': sec_type,
+                'name': SECTION_INFO[sec_type]['name'],
+                'bars': int((end_time - start_time) / 4),
+                'energy': round(float(avg_spectral_norm), 4)
+            })
+            
+            prev_idx = idx
+    
+    return None, sections if sections else [{'start': 0, 'end': duration, 'type': 'verse', 'name': 'Verse', 'bars': int(duration/4), 'energy': 0.5}]
 
-@app.route('/analyze', methods=['POST'])
-def analyze():
+def analyze_spectral(y, sr, duration):
+    """Spectral段落检测"""
+    hop_length = 512
+    
+    spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=hop_length)[0]
+    spectral_bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr, hop_length=hop_length)[0]
+    spectral_rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr, hop_length=hop_length)[0]
+    zcr = librosa.feature.zero_crossing_rate(y, hop_length=hop_length)[0]
+    
+    sc = (spectral_centroid - spectral_centroid.min()) / (spectral_centroid.max() - spectral_centroid.min() + 1e-10)
+    sb = (spectral_bandwidth - spectral_bandwidth.min()) / (spectral_bandwidth.max() - spectral_bandwidth.min() + 1e-10)
+    sr_norm = (spectral_rolloff - spectral_rolloff.min()) / (spectral_rolloff.max() - spectral_rolloff.min() + 1e-10)
+    zcr_norm = (zcr - zcr.min()) / (zcr.max() - zcr.min() + 1e-10)
+    
+    features = (sc + sb + sr_norm + zcr_norm) / 4
+    
+    kernel_size = 7
+    kernel = np.ones(kernel_size) / kernel_size
+    features_smooth = np.convolve(features, kernel, mode='same')
+    
+    segment_duration = 4.0
+    n_segments = int(duration / segment_duration) + 1
+    
+    sections = []
+    for i in range(n_segments):
+        start_time = i * segment_duration
+        end_time = min((i + 1) * segment_duration, duration)
+        
+        start_frame = int(start_time * sr / hop_length)
+        end_frame = int(end_time * sr / hop_length)
+        
+        if start_frame < len(features_smooth):
+            avg_feat = float(np.mean(features_smooth[start_frame:min(end_frame, len(features_smooth))]))
+        else:
+            avg_feat = 0.5
+        
+        pos_ratio = start_time / duration if duration > 0 else 0
+        sec_type = classify_section(pos_ratio, avg_feat)
+        
+        sections.append({
+            'start': start_time,
+            'end': end_time,
+            'type': sec_type,
+            'name': SECTION_INFO[sec_type]['name'],
+            'bars': int((end_time - start_time) / 4),
+            'energy': round(avg_feat, 4)
+        })
+    
+    return None, sections
+
+@app.route('/analyze-all', methods=['POST'])
+def analyze_all():
+    """分析所有算法"""
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
     
     file = request.files['file']
-    result = analyze_audio(file.read(), file.filename)
+    filename = file.filename or 'audio.mp3'
+    audio_data = file.read()
     
-    if 'error' in result:
-        return jsonify(result), 500
-    
-    return jsonify(result)
-
-@app.route('/analyze-base64', methods=['POST'])
-def analyze_base64():
-    data = request.get_json()
-    if 'audio' not in data:
-        return jsonify({'error': 'No audio data provided'}), 400
+    # 保存临时文件
+    suffix = os.path.splitext(filename)[1] if '.' in filename else '.mp3'
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
+        f.write(audio_data)
+        temp_path = f.name
     
     try:
-        audio_data = base64.b64decode(data['audio'])
-        filename = data.get('filename', 'audio.mp3')
-        result = analyze_audio(audio_data, filename)
+        # librosa
+        y, sr = librosa.load(temp_path, sr=22050, mono=True)
+        duration = len(y) / sr
         
-        if 'error' in result:
-            return jsonify(result), 500
+        results = {
+            'librosa': {'success': True, 'method': 'librosa'},
+            'essentia': {'success': HAS_ESSENTIA, 'method': 'essentia'},
+            'madmom': {'success': MADMOM_PATH is not None, 'method': 'madmom'},
+            'mfcc': {'success': True, 'method': 'mfcc'},
+            'ssm': {'success': True, 'method': 'ssm'},
+            'spectral': {'success': True, 'method': 'spectral'},
+        }
         
-        return jsonify(result)
+        # librosa
+        bpm, sections = analyze_librosa(y, sr, duration)
+        results['librosa']['bpm'] = bpm
+        results['librosa']['sections'] = sections
+        results['librosa']['duration'] = duration
+        
+        # essentia
+        if HAS_ESSENTIA:
+            bpm_e, sections_e = analyze_essentia(temp_path, duration)
+            if bpm_e:
+                results['essentia']['bpm'] = bpm_e
+                results['essentia']['sections'] = sections_e
+            else:
+                results['essentia']['success'] = False
+        else:
+            results['essentia']['error'] = 'not installed'
+        
+        # madmom
+        if MADMOM_PATH:
+            bpm_m, sections_m = analyze_madmom(temp_path, duration)
+            if bpm_m:
+                results['madmom']['bpm'] = bpm_m
+                results['madmom']['sections'] = sections_m
+            else:
+                results['madmom']['success'] = False
+        else:
+            results['madmom']['error'] = 'conda not available'
+        
+        # mfcc
+        _, sections_mfcc = analyze_mfcc(y, sr, duration)
+        results['mfcc']['sections'] = sections_mfcc
+        
+        # ssm
+        _, sections_ssm = analyze_ssm(y, sr, duration)
+        results['ssm']['sections'] = sections_ssm
+        
+        # spectral
+        _, sections_spec = analyze_spectral(y, sr, duration)
+        results['spectral']['sections'] = sections_spec
+        
+        # 清理 NaN 值
+        results = sanitize_results(results)
+        
+        return jsonify({'success': True, 'results': results})
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        os.unlink(temp_path)
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    """librosa分析"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    audio_data = file.read()
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as f:
+        f.write(audio_data)
+        temp_path = f.name
+    
+    try:
+        y, sr = librosa.load(temp_path, sr=22050, mono=True)
+        duration = len(y) / sr
+        bpm, sections = analyze_librosa(y, sr, duration)
+        
+        return jsonify({
+            'success': True,
+            'bpm': bpm,
+            'duration': duration,
+            'sections': sections
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    finally:
+        os.unlink(temp_path)
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'librosa': HAS_LIBROSA})
+    return jsonify({
+        'status': 'ok',
+        'librosa': HAS_LIBROSA,
+        'essentia': HAS_ESSENTIA,
+        'madmom': MADMOM_PATH is not None
+    })
 
 if __name__ == '__main__':
-    print("🎵 VJ-Gen Audio Analysis Server (优化版)")
-    print("=" * 45)
-    print(f"librosa: {'✅' if HAS_LIBROSA else '❌'}")
+    print("🎵 VJ-Gen Audio Analysis Server (全算法版)")
+    print("=" * 50)
+    print(f"librosa:  {'✅' if HAS_LIBROSA else '❌'}")
+    print(f"Essentia: {'✅' if HAS_ESSENTIA else '❌'}")
+    print(f"madmom:   {'✅' if MADMOM_PATH else '❌'}")
+    print("\nEndpoints:")
+    print("  /analyze-all - 所有算法")
+    print("  /analyze     - librosa")
     print("Server: http://localhost:5001")
-    app.run(host='0.0.0.0', port=5001)
+    app.run(host='0.0.0.0', port=5001, debug=False)
