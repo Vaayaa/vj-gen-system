@@ -157,8 +157,8 @@ class MadmomAnalyzer:
     def __init__(
         self,
         beats_per_bar: int = 4,
-        min_bpm: float = 55.0,
-        max_bpm: float = 215.0,
+        min_bpm: float = 60.0,
+        max_bpm: float = 200.0,
         dbn_threshold: float = 0.05,
         fps: int = 100,
         transition_lambda: float = 100.0,
@@ -268,20 +268,27 @@ class MadmomAnalyzer:
         
         # 计算平均节拍间隔
         intervals = np.diff(beats)
-        
-        # 过滤异常值
+
+        # 过滤异常值（从 0.5x~2x 收紧到 0.8x~1.2x，与 audio_analysis_module 保持一致）
         median_interval = np.median(intervals)
         valid_intervals = intervals[
-            (intervals > 0.5 * median_interval) & 
-            (intervals < 2.0 * median_interval)
+            (intervals > 0.8 * median_interval) &
+            (intervals < 1.2 * median_interval)
         ]
-        
+
         if len(valid_intervals) == 0:
             return 120.0
-        
+
         avg_interval = np.mean(valid_intervals)
         bpm = 60.0 / avg_interval
-        
+
+        # BPM 范围钳制（60-200）
+        if bpm < 60.0:
+            bpm = bpm * 2.0
+        if bpm > 200.0:
+            bpm = bpm / 2.0
+        bpm = max(60.0, min(200.0, bpm))
+
         return round(float(bpm), 2)
     
     def analyze(self, audio_path: str) -> Dict[str, Any]:
