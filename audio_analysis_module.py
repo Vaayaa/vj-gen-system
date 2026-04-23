@@ -4,23 +4,92 @@ import numpy as np
 import librosa
 import warnings
 warnings.filterwarnings("ignore")
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 PITCH = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 MAJ = np.array([6.35,2.23,3.48,2.33,4.38,4.09,2.52,5.19,2.39,3.66,2.29,2.88])
 MIN = np.array([6.33,2.68,3.52,5.38,2.60,3.53,2.54,4.75,3.98,2.69,3.34,3.17])
 
+# BPM 校正参数
+BPM_MIN = 60.0
+BPM_MAX = 200.0
+BPM_MEDIAN_FILTER_SIZE = 5
+BPM_OUTLIER_THRESHOLD = 0.20  # 偏离中位数 >20% 则剔除
+
+
+def _validate_bpm(bpm: float) -> float:
+    """将 BPM 钳制到合理范围，并处理 librosa 2x/0.5x 误检测"""
+    if bpm <= 0:
+        return 120.0
+    # 处理 librosa 可能检测到 2x 或 0.5x 的情况
+    if bpm > BPM_MAX * 1.5:
+        bpm = bpm / 2.0
+    elif bpm > BPM_MAX:
+        bpm = BPM_MAX
+    if bpm < BPM_MIN:
+        bpm = bpm * 2.0
+    if bpm < BPM_MIN:
+        bpm = BPM_MIN
+    if bpm > BPM_MAX:
+        bpm = BPM_MAX
+    return round(bpm, 2)
+
+
+def _multi_frame_bpm(audio_path: str) -> float:
+    """多帧平均 BPM：分段检测后取中位数，避免单帧突变"""
+    y, sr = librosa.load(audio_path, sr=22050, mono=True)
+
+    # 分 3 段检测（跳过前后静音区），取中位数
+    segment_ratios = [
+        (0.10, 0.40),
+        (0.30, 0.70),
+        (0.60, 0.95),
+    ]
+    bpm_candidates: List[float] = []
+
+    for s_ratio, e_ratio in segment_ratios:
+        s_sample = int(s_ratio * len(y))
+        e_sample = int(e_ratio * len(y))
+        if e_sample <= s_sample:
+            continue
+        seg_y = y[s_sample:e_sample]
+        try:
+            onset_env = librosa.onset.onset_strength(y=seg_y, sr=sr, hop_length=512)
+            seg_tempo = float(librosa.beat.tempo(onset_envelope=onset_env, sr=sr)[0])
+            seg_tempo = _validate_bpm(seg_tempo)
+            bpm_candidates.append(seg_tempo)
+        except Exception:
+            pass
+
+    if not bpm_candidates:
+        return 120.0
+
+    median_bpm = float(np.median(bpm_candidates))
+    # 剔除偏离中位数 >20% 的异常帧
+    valid = [b for b in bpm_candidates if abs(b - median_bpm) / (median_bpm + 1e-10) <= BPM_OUTLIER_THRESHOLD]
+    if not valid:
+        return round(median_bpm, 2)
+    return round(float(np.median(valid)), 2)
+
 
 def analyze_beats(path: str) -> Dict[str, Any]:
     y, sr = librosa.load(path, sr=22050)
     o = librosa.onset.onset_strength(y=y, sr=sr, hop_length=512)
-    t = float(librosa.beat.tempo(onset_envelope=o, sr=sr)[0])
+
+    # 多帧平均 BPM（避免单帧突变）
+    t = _multi_frame_bpm(path)
+
     _, bf = librosa.beat.beat_track(onset_envelope=o, sr=sr, start_bpm=t, tightness=100, trim=True, units="frames")
     bt = librosa.frames_to_time(bf, sr=sr, hop_length=512)
     iv = np.diff(bt) if len(bt) > 1 else np.array([0.5])
     mi = np.median(iv)
-    v = iv[(iv > 0.5 * mi) & (iv < 2 * mi)]
+    # 异常值剔除：与中位数偏差 >20% 则不用（从 0.5x~2x 收紧到 0.8x~1.2x）
+    v = iv[(iv > (1 - BPM_OUTLIER_THRESHOLD) * mi) & (iv < (1 + BPM_OUTLIER_THRESHOLD) * mi)]
     c = float(1 - min(1.0, max(0.0, np.std(v) / (mi + 1e-10)))) if len(v) > 0 else 0.0
+
+    # BPM 范围钳制（双重保护）
+    t = _validate_bpm(t)
+
     return {"bpm": round(t, 2), "beats": [round(float(x), 4) for x in bt],
             "n": len(bt), "conf": round(c, 3), "dur": round(float(len(y)) / sr, 1)}
 
